@@ -1,0 +1,98 @@
+/* TSC Vehicle Workflow Guide - print stylesheet (A4, rendered by Chromium) */
+:root {
+  --ink: #1b2330;
+  --muted: #5b6676;
+  --line: #d5dbe3;
+  --paper: #ffffff;
+  --band: #16324f;
+  --accent: #1f6fb2;
+  --accent-soft: #e8f1fa;
+  --teal: #177a6e;
+  --teal-soft: #e5f4f1;
+  --amber: #a86400;
+  --amber-soft: #fdf3e2;
+  --red: #b3261e;
+  --red-soft: #fbeceb;
+  --code-bg: #f4f6f9;
+}
+@page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+* { box-sizing: border-box; }
+html, body { background: var(--paper); color: var(--ink); }
+body {
+  font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+  font-size: 10pt; line-height: 1.5; margin: 0;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+h1, h2, h3, h4 { color: var(--band); line-height: 1.25; break-after: avoid; }
+h1 { font-size: 20pt; margin: 0 0 6mm; }
+h2 { font-size: 14pt; margin: 9mm 0 3mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid var(--accent); }
+h3 { font-size: 11.5pt; margin: 6mm 0 2mm; }
+h4 { font-size: 10pt; margin: 4mm 0 1mm; color: var(--accent); }
+p { margin: 0 0 2.6mm; }
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin: 0 0 1mm; }
+a { color: var(--accent); text-decoration: none; }
+strong { color: #0f1a27; }
+code, kbd, .mono { font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; font-size: 8.6pt; }
+code { background: var(--code-bg); padding: 0.2mm 1mm; border-radius: 2px; }
+kbd { border: 1px solid #b9c2cd; border-bottom-width: 2px; border-radius: 3px; padding: 0 1.2mm; background: #fafbfc; }
+pre {
+  font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; font-size: 8.2pt; line-height: 1.42;
+  background: var(--code-bg); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  padding: 3mm 3.5mm; margin: 0 0 4mm; white-space: pre-wrap; word-break: break-word; break-inside: avoid;
+}
+pre .c { color: #6a737d; } pre .k { color: #0b5cad; font-weight: bold; } pre .s { color: #0a7a3b; }
+table { border-collapse: collapse; width: 100%; margin: 0 0 4mm; font-size: 8.8pt; break-inside: auto; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { background: var(--band); color: #fff; text-align: left; font-weight: bold; padding: 1.6mm 2mm; }
+td { border-bottom: 1px solid var(--line); padding: 1.5mm 2mm; vertical-align: top; }
+tbody tr:nth-child(even) td { background: #f7f9fb; }
+td code, th code { font-size: 8pt; }
+
+/* call-out boxes */
+.box { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--accent-soft);
+  padding: 2.6mm 3.5mm; margin: 0 0 4mm; break-inside: avoid; border-radius: 0 3px 3px 0; }
+.box > .t { font-weight: bold; display: block; margin-bottom: 1mm; color: var(--accent); }
+.box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+.box.tip { border-left-color: var(--teal); background: var(--teal-soft); } .box.tip > .t { color: var(--teal); }
+.box.warn { border-left-color: var(--amber); background: var(--amber-soft); } .box.warn > .t { color: var(--amber); }
+.box.rule { border-left-color: var(--red); background: var(--red-soft); } .box.rule > .t { color: var(--red); }
+.box.ev { border-left-color: #6b4fa0; background: #f3effa; } .box.ev > .t { color: #6b4fa0; }
+
+/* figures */
+figure { margin: 2mm 0 5mm; break-inside: avoid; text-align: center; }
+figure svg { max-width: 100%; height: auto; }
+figcaption { font-size: 8.6pt; color: var(--muted); margin-top: 1.5mm; text-align: left; }
+figcaption b { color: var(--ink); }
+
+/* steps */
+ol.steps { list-style: none; counter-reset: s; padding-left: 0; }
+ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.4mm; break-inside: avoid; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0.2mm; width: 6mm; height: 6mm;
+  border-radius: 50%; background: var(--accent); color: #fff; font-weight: bold; font-size: 8.5pt;
+  display: flex; align-items: center; justify-content: center; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.two > div { break-inside: avoid; }
+.small { font-size: 8.6pt; color: var(--muted); }
+.pill { display: inline-block; font-size: 7.6pt; font-weight: bold; padding: 0.2mm 1.6mm; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid #c4dbf0; vertical-align: 1px; }
+.pill.v { background: #e6f4ea; color: #1e6b35; border-color: #b9dfc4; }
+.pill.u { background: var(--amber-soft); color: var(--amber); border-color: #f0d6a8; }
+.pagebreak { break-before: page; }
+
+/* cover */
+.cover { height: 257mm; display: flex; flex-direction: column; break-after: page; }
+.cover .top { background: var(--band); color: #fff; padding: 12mm 12mm 10mm; border-radius: 4px; }
+.cover .series { font-size: 9pt; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.85; }
+.cover .partno { font-size: 44pt; font-weight: bold; line-height: 1; margin: 6mm 0 2mm; color: #8cc4f2; }
+.cover h1 { color: #fff; font-size: 24pt; margin: 0 0 3mm; }
+.cover .sub { font-size: 11pt; opacity: 0.92; max-width: 150mm; }
+.cover .toc { margin-top: 9mm; }
+.cover .toc h3 { margin-top: 0; }
+.cover .toc ol { columns: 1; }
+.cover .toc li { margin-bottom: 1.4mm; }
+.cover .foot { margin-top: auto; font-size: 8.4pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 3mm; }
+.legend span { margin-right: 5mm; }
+.cover .top code { background: rgba(255,255,255,0.16); color: #fff; }

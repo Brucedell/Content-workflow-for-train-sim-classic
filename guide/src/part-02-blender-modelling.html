@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 2 — Modelling in Blender for TSC</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 2</div>
+    <h1>Modelling in Blender for TSC, and exporting geometry with BRIAGE</h1>
+    <div class="sub">Build the model so that the exported <code>.igs</code> already has the node names, origins, LODs and materials
+      the blueprints expect. Most of the rules here exist because a blueprint will later refer to something by name or position.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Set up the .blend once</li>
+    <li>The object naming scheme (LOD + distance + name)</li>
+    <li>The object hierarchy of a locomotive</li>
+    <li>Origins, pivots and transforms</li>
+    <li>Bogies and wheels</li>
+    <li>Materials and TSC shaders</li>
+    <li>Textures and texture paths</li>
+    <li>Special objects: lights, numbers, shadows, collision</li>
+    <li>Levels of detail</li>
+    <li>The cab</li>
+    <li>Exporting the IGS with BRIAGE</li>
+    <li>Pre-export checklist</li>
+  </ol></div>
+  <div class="foot">BRIAGE rules are quoted from the BRIAGE user manual v2.5.786 (section numbers given as “BRIAGE §x”).
+  Numbers in examples come from the Kuju sample electric's Blender scene and its raw geometry export.</div>
+</section>
+
+<h1>1 · Set up the .blend once</h1>
+<ol class="steps">
+<li><b>Units:</b> Scene ▸ Units = Metric, Unit Scale 1.0. One Blender unit is one metre in game.</li>
+<li><b>Orientation:</b> the vehicle's front points along <b>+Y</b>; X is to the right; Z is up. (Blender Y becomes TSC Z on export.)</li>
+<li><b>Origin:</b> the world origin is the <b>centre of the vehicle on the rail head</b>. The body object's origin sits exactly
+at (0,&nbsp;0,&nbsp;0) and the bottom of every wheel touches Z&nbsp;=&nbsp;0. (BRIAGE §3.3: “the pivot of the main body… must be centred with z&nbsp;=&nbsp;0 at the rail contact”.)</li>
+<li><b>Location on disk:</b> save the .blend inside <code>RailWorks\Source\Provider\Product\RailVehicles\…\YourVehicle\</code>, with
+textures in a sub-folder on the <b>same drive</b> (BRIAGE §9.3).</li>
+<li><b>One scene per model:</b> BRIAGE stores its export settings per scene (BRIAGE §4), so keep the exterior, the cab and each
+wagon variant in separate scenes of the same .blend. They can share materials, bogies and textures.</li>
+<li><b>Frame 0 is the rest pose.</b> BRIAGE sets the current frame to 0 while exporting the IGS (BRIAGE §8.4.1). Everything
+must look “parked” on frame 0: pantographs down, doors shut, levers at their minimum.</li>
+<li><b>Frame rate:</b> choose one rate for the project (the sample scenes use 24&nbsp;fps) and never change it; BRIAGE writes
+<code>fps × Frame rate Multiplier</code> into each .ia (BRIAGE §5.1–5.2).</li>
+</ol>
+
+<h1>2 · The object naming scheme</h1>
+<p>Every exported object is named <b>LOD level</b>, <b>visible distance</b> and <b>base name</b>. The prefix is consumed by the exporter
+and turned into LOD data; the <b>base name</b> is what ends up as the node name the blueprints refer to.
+Verified on the sample: Blender <code>1_0500_bo01</code> becomes node <code>bo01</code> in the geometry. <span class="pill v">verified</span></p>
+
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <g font-family="DejaVu Sans Mono, monospace" font-size="34" font-weight="bold">
+    <rect x="130" y="30" width="44" height="54" rx="5" fill="#1f6fb2"/><text x="152" y="70" text-anchor="middle" fill="#fff">1</text>
+    <text x="180" y="70" fill="#8a96a6">_</text>
+    <rect x="202" y="30" width="96" height="54" rx="5" fill="#177a6e"/><text x="250" y="70" text-anchor="middle" fill="#fff">0500</text>
+    <text x="304" y="70" fill="#8a96a6">_</text>
+    <rect x="326" y="30" width="264" height="54" rx="5" fill="#16324f"/><text x="458" y="70" text-anchor="middle" fill="#fff">bo01wh02</text>
+  </g>
+  <g stroke="#5b6676" fill="none"><path d="M152,86 L152,110"/><path d="M250,86 L250,110"/><path d="M458,86 L458,110"/></g>
+  <text x="152" y="124" text-anchor="middle" font-weight="bold" fill="#1f6fb2">LOD level</text>
+  <text x="152" y="140" text-anchor="middle">1 = most detailed</text><text x="152" y="154" text-anchor="middle">single digit</text>
+  <text x="250" y="124" text-anchor="middle" font-weight="bold" fill="#177a6e">Visible distance</text>
+  <text x="250" y="140" text-anchor="middle">metres, 4 digits</text><text x="250" y="154" text-anchor="middle">0000 = always (cab)</text>
+  <text x="458" y="124" text-anchor="middle" font-weight="bold" fill="#16324f">Base name = node name</text>
+  <text x="458" y="140" text-anchor="middle">what blueprints refer to</text><text x="458" y="154" text-anchor="middle">keywords like bo01, wh02, panto01 are recognised</text>
+  <text x="360" y="186" text-anchor="middle" fill="#5b6676">Whole name ≤ 31 characters (Railworks rule quoted in BRIAGE §10.4); stay ≤ 24 to avoid truncation clashes (BRIAGE §8.1.3, §9.10).</text>
+</svg>
+<figcaption><b>Figure 2.1 · Anatomy of an object name.</b> A name without a valid prefix is renamed to <code>1_1000_name</code>
+by BRIAGE and logged as a warning; <code>1_2_x</code> becomes <code>1_2000_x</code> (BRIAGE §10.4). Do not rely on the fix-up.
+Name things correctly and read the log.</figcaption>
+</figure>
+
+<h3>Distances used by the Kuju sample</h3>
+<table>
+<thead><tr><th>Prefix</th><th>Objects</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><code>1_0500_</code> / <code>2_1200_</code></td><td>Body, bogies, wheels: detailed to 500&nbsp;m, simplified twin to 1200&nbsp;m</td><td>The main silhouette stays visible far away</td></tr>
+<tr><td><code>1_1000_</code></td><td>Light cones, number plates</td><td>Lights must be seen from a distance at night</td></tr>
+<tr><td><code>1_0400_</code></td><td>Stencil shadow meshes</td><td>Shadows are expensive; drop them early</td></tr>
+<tr><td><code>1_0128_</code></td><td>Pantographs</td><td>Thin detail; invisible beyond ~128&nbsp;m anyway</td></tr>
+<tr><td><code>1_0064_</code></td><td>Wipers</td><td>Tiny detail</td></tr>
+<tr><td><code>1_0000_</code> <code>2_0000_</code> <code>3_0000_</code></td><td>Cab objects</td><td>Stored as “always visible”; the cab LOD controllers hold max-float distances <span class="pill v">verified</span></td></tr>
+</tbody></table>
+
+<h3>Keywords and merging</h3>
+<p>With <b>Hierarchy processing</b> on (the default), BRIAGE merges objects that share the same LOD level and distance into one
+node, to keep draw calls low, <em>unless</em> they contain a TSC keyword or a custom keyword (BRIAGE §4.7). Built-in keywords
+(<code>$</code> = digit): <code>_locomotive _tender _coach _vehicle _wagon _carriage _coal _fuel_level_ _freight _bulk
+_lights_fwdhead _lights_revhead _lights_fwdtail _lights_revtail _door$$ _step$$ _wh$$ _bo$$ _panto$$ _wiper$$ _primarydigits_$</code>.</p>
+<div class="box rule"><span class="t">The merging rule that breaks animations</span>
+<p>If an object must move on its own (a lever, a door, a pantograph arm, a con-rod), it must stay a separate node. Either give
+it a keyword name (<code>door01</code>, <code>panto01_part02</code>) or add its full name to BRIAGE's <b>Custom keywords</b> table.
+Otherwise it gets merged into the body and its animation silently moves nothing. After exporting, check the
+“Groups list” in the log to see what was merged (BRIAGE §8.4.2, §10.3).</p></div>
+<p>Limits: <b>256 objects</b> per IGS including LODs (BRIAGE §8.4.1) and <b>24 children</b> per node in the IGS format (BRIAGE §4.7).
+Merging is how large models stay under them.</p>
+
+<h1>3 · The object hierarchy of a locomotive</h1>
+<figure>
+<svg viewBox="0 0 720 440" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono, monospace" font-size="10">
+  <style>.n{fill:#1b2330}.b{fill:#1f6fb2;font-weight:bold}.s{fill:#8a96a6}.a{fill:#a86400;font-weight:bold}.c{font-family:DejaVu Sans, Arial;fill:#5b6676;font-size:9px}</style>
+  <g stroke="#b9c2cd" fill="none">
+    <path d="M20,30 V420"/><path d="M20,52 H34"/><path d="M20,74 H34"/><path d="M20,96 H34"/>
+    <path d="M20,122 H34"/><path d="M44,130 V236"/><path d="M44,144 H58"/><path d="M44,166 H58"/><path d="M44,188 H58"/><path d="M44,210 H58"/><path d="M44,232 H58"/>
+    <path d="M68,152 V160"/>
+    <path d="M20,258 H34"/><path d="M20,284 H34"/><path d="M44,292 V320"/><path d="M44,306 H58"/><path d="M68,314 V320"/><path d="M68,328 H82"/>
+    <path d="M20,350 H34"/><path d="M20,372 H34"/><path d="M20,394 H34"/><path d="M20,416 H34"/>
+  </g>
+  <text x="10" y="22" class="b">Scene (exterior)</text>
+  <text x="38" y="56" class="b">1_0500_engine</text><text x="200" y="56" class="c">body, main object. Origin (0,0,0) on rail head. Materials Body, Transparency, Underside</text>
+  <text x="38" y="78" class="s">  └ 2_1200_engine</text><text x="200" y="78" class="c">LOD 2 twin (child of LOD 1, same base name, larger distance)</text>
+  <text x="38" y="100" class="s">  └ 1_0400_shadow_engine</text><text x="200" y="100" class="c">stencil shadow, material shadow_engine (StencilShadow.fx)</text>
+  <text x="38" y="126" class="b">1_0500_bo01</text><text x="200" y="126" class="c">front bogie. Origin = pivot. Must be bo01 and at +Y</text>
+  <text x="62" y="148" class="n">1_0500_bo01wh01</text><text x="200" y="148" class="c">wheelset, origin = axle centre, rotates about X</text>
+  <text x="80" y="164" class="s">└ 2_1200_bo01wh01, 1_0400_shadow_bo01wh01</text>
+  <text x="62" y="192" class="n">1_0500_bo01wh02</text>
+  <text x="62" y="214" class="n">1_0500_bo01wh03</text>
+  <text x="62" y="236" class="s">2_1200_bo01, 1_0400_shadow_bo01</text>
+  <text x="38" y="262" class="b">1_0500_bo02</text><text x="200" y="262" class="c">rear bogie (same structure, at −Y)</text>
+  <text x="38" y="288" class="a">1_0128_panto01_part01</text><text x="230" y="288" class="c">animated chain: each part parented to the previous</text>
+  <text x="62" y="310" class="a">1_0128_panto01_part02</text>
+  <text x="86" y="332" class="a">1_0128_panto01_part03</text>
+  <text x="38" y="354" class="a">1_0128_panto02_part01 …</text><text x="230" y="354" class="c">second pantograph</text>
+  <text x="38" y="376" class="a">1_0064_wiper01_l / _r, wiper02_l / _r</text><text x="330" y="376" class="c">animated separately</text>
+  <text x="38" y="398" class="n">1_1000_light_fwdhead / fwdtail / revhead / revtail</text><text x="440" y="398" class="c">glow meshes</text>
+  <text x="38" y="420" class="n">1_1000_primarydigits_5</text><text x="230" y="420" class="c">running number, 5 digits</text>
+</svg>
+<figcaption><b>Figure 2.2 · The sample electric's exterior hierarchy</b> (from the scene read, 43 objects).
+<span style="color:#1f6fb2;font-weight:bold">Blue</span>: nodes blueprints refer to; <span style="color:#a86400;font-weight:bold">orange</span>: nodes that animate;
+grey: LOD twins and shadows. Parent-child links matter: the bogie blueprint finds <code>bo01wh01</code> as a child of <code>bo01</code>,
+and each pantograph part inherits its parent's motion. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>4 · Origins, pivots and transforms</h1>
+<table>
+<thead><tr><th style="width:40mm">Object</th><th>Where its origin goes</th><th style="width:56mm">Why</th></tr></thead>
+<tbody>
+<tr><td>Body (main object)</td><td>(0,&nbsp;0,&nbsp;0): centre of the vehicle, on the rail head</td><td>All blueprint distances are measured from here</td></tr>
+<tr><td>Bogie</td><td>On its turning axis, at the pivot height</td><td>The bogie rotates about its origin (BRIAGE §3.3)</td></tr>
+<tr><td>Wheelset</td><td>Axle centre; centre height = wheel radius</td><td>Spins about its origin; bottom must touch Z&nbsp;=&nbsp;0</td></tr>
+<tr><td>Lever, door, wiper, pantograph part</td><td>Exactly on its hinge</td><td>IA files store only rotation and position about the origin</td></tr>
+<tr><td>Static detail</td><td>Centred on its geometry</td><td>BRIAGE's general advice (§3.3)</td></tr>
+</tbody></table>
+<div class="box rule"><span class="t">Apply scale. Always.</span>
+<p>IA files carry position and rotation but <b>no scale</b> (BRIAGE §8.5.2). Unapplied or negative scale is “known to cause untraceable
+bugs” (BRIAGE §9.8). Select all ▸ <kbd>Ctrl</kbd>+<kbd>A</kbd> ▸ Scale before every export. Apply rotation on static objects too; on
+animated objects, apply before you start keyframing (BRIAGE §9.9).</p></div>
+<p>Modifiers are evaluated but not applied to your scene on export (BRIAGE §3.3), and n-gons are allowed. Mirror and Array are
+safe to keep live.</p>
+
+<h1>5 · Bogies and wheels</h1>
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <defs><marker id="b5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2330"/></marker></defs>
+  <!-- scale 50 px/m, bogie centre x=360, rail y=200 -->
+  <rect x="220" y="150" width="280" height="30" rx="5" fill="#8a96a6"/>
+  <g fill="#fff" stroke="#16324f" stroke-width="2">
+    <circle cx="250" cy="173.75" r="26.25"/><circle cx="360" cy="173.75" r="26.25"/><circle cx="470" cy="173.75" r="26.25"/>
+  </g>
+  <g fill="#16324f"><circle cx="250" cy="173.75" r="3"/><circle cx="360" cy="173.75" r="3"/><circle cx="470" cy="173.75" r="3"/></g>
+  <line x1="60" y1="200" x2="660" y2="200" stroke="#1b2330" stroke-width="2.5"/>
+  <line x1="360" y1="60" x2="360" y2="230" stroke="#1f6fb2" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="366" y="70" fill="#1f6fb2" font-weight="bold">bogie origin = pivot</text>
+  <text x="366" y="84" fill="#1f6fb2">BogeyPivotX (vehicle bp)</text>
+  <line x1="360" y1="110" x2="470" y2="110" stroke="#1b2330" marker-end="url(#b5)"/><text x="415" y="104" text-anchor="middle">+2.2 m</text>
+  <line x1="360" y1="110" x2="250" y2="110" stroke="#1b2330" marker-end="url(#b5)"/><text x="305" y="104" text-anchor="middle">−2.2 m</text>
+  <text x="415" y="126" text-anchor="middle" fill="#5b6676" font-size="9">Axle HorizontalOffset</text>
+  <line x1="510" y1="173.75" x2="510" y2="200" stroke="#b3261e" stroke-width="1.5" marker-start="url(#b5)" marker-end="url(#b5)"/>
+  <text x="518" y="186" fill="#b3261e">radius = centre height</text>
+  <text x="518" y="199" fill="#b3261e" font-size="9">sample: mesh 0.525, bp 0.55 ✘</text>
+  <text x="70" y="216" fill="#5b6676">rail head Z = 0</text>
+  <text x="120" y="160" fill="#16324f" font-weight="bold">bo01wh03</text><text x="330" y="232" fill="#16324f" font-weight="bold">bo01wh02</text><text x="560" y="160" fill="#16324f" font-weight="bold">bo01wh01 (front)</text>
+  <text x="360" y="246" text-anchor="middle" fill="#5b6676" font-size="9">front of vehicle →</text>
+</svg>
+<figcaption><b>Figure 2.3 · A three-axle bogie.</b> The bogie blueprint repeats what the model shows: <code>Geometry</code> = the bogie
+node, each <code>Axle</code> = a wheel node + offset + radius. <b>The blueprint has the final say</b> in game, so the blueprint and
+model must agree or the parts are drawn in one place and behave in another. Part&nbsp;7's toolkit writes the bogie blueprint
+<em>from</em> the model to guarantee this.</figcaption>
+</figure>
+<ul>
+<li><b>bo01 is the front bogie, bo02 the rear</b> (BRIAGE §3.3). The front is +Y in Blender.</li>
+<li>Wheels are children of their bogie, named <code>bo01wh01</code>, <code>bo01wh02</code>… Number them front to back to keep blueprints readable (the sample does).</li>
+<li>Wheel radius: measure the mesh, not the drawing. Centre height must equal radius (bottom of the tyre on Z&nbsp;=&nbsp;0).</li>
+<li>Single-truck vehicles (the 1890s streetcar) use one bogie with <code>BogeyPivotX = 0</code>. A two-axle wagon without bogies still
+needs a “bogie” entry per axle group in the blueprint; model it the same way.</li>
+<li>Steam: the 7F has a front pony truck bogie at +5.151&nbsp;m and a second bogie entry at 0 (the coupled wheels). Rods and valve gear
+must not be merged; use custom keywords (BRIAGE §10.3 walks through exactly this case). <span class="pill v">verified</span></li>
+</ul>
+
+<h1>6 · Materials and TSC shaders</h1>
+<p>A TSC material is a <b>shader name</b> + an ordered list of <b>texture slots</b> + a few parameters. Blender's own shading is
+ignored; only what BRIAGE's material panel records is exported. Pick the shader first, because it decides how many slots you
+need (“Failing to use the right number of texture slots… will generate an error on export”, BRIAGE §6.1.1).</p>
+<table>
+<thead><tr><th style="width:52mm">Use</th><th style="width:52mm">Shader</th><th>Slots (in order)</th></tr></thead>
+<tbody>
+<tr><td>Plain painted body</td><td><code>TrainBasicObjectDiffuse.fx</code></td><td>1: diffuse RGB (1-bit alpha allowed with Transparency ticked)</td></tr>
+<tr><td>Body with specular (sample “Body”)</td><td><code>TrainBasicObjectSpecular.fx</code></td><td>1: diffuse · 2: specular <span class="pill v">verified</span></td></tr>
+<tr><td>Body with normal map</td><td><code>TrainBump.fx</code> / <code>TrainBumpSpec.fx</code></td><td>1: diffuse · 2: normal</td></tr>
+<tr><td>Shiny paint, reflections</td><td><code>TrainBumpSpecEnvMask.fx</code></td><td>1: diffuse (A = spec) · 2: normal · 3: cubemap. UV arg1 ≈ 32</td></tr>
+<tr><td>Windows with reflection</td><td><code>TrainGlass.fx</code></td><td>1: RGBA · 2: cubemap. UV args 64 / 0.8 / 0.4</td></tr>
+<tr><td>Cab windscreen with rain</td><td><code>TrainGlassWeatherEffects.fx</code></td><td>Material must be named <code>weatherglass_1</code>, <code>_2</code>… (BRIAGE §8.7.5)</td></tr>
+<tr><td>Decals, numbers</td><td><code>TrainDecal.fx</code></td><td>1: RGBA, grey alpha; ZBufferMode “test only”</td></tr>
+<tr><td>Baked lightmap/AO</td><td><code>TrainLightMapWithDiffuse.fx</code></td><td>1: diffuse · 2: lightmap (second UV map)</td></tr>
+<tr><td>Lamp glow, halo</td><td><code>AddATex</code> / <code>UnlitSingle</code> (additive)</td><td>1: RGBA; sample lights use UnlitSingle + additive <span class="pill v">verified</span></td></tr>
+<tr><td>Stencil shadow</td><td><code>StencilShadow.fx</code></td><td>Material name must start with <code>shadow_</code></td></tr>
+<tr><td>Invisible pick/collision box</td><td><code>Invisible</code></td><td>No texture at all (a texture causes an error, BRIAGE §8.7.4)</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">Performance</span><p>“The number of polygons impacts the game's fps far less than a high number of materials” (BRIAGE §8.7.1).
+Atlas your textures and aim for a handful of materials per vehicle; the sample exterior uses 11, most of them the five number digits.</p></div>
+
+<h1>7 · Textures and texture paths</h1>
+<ul>
+<li>Use power-of-two sizes (512, 1024, 2048…). BPE2 converts them to <code>.TgPcDx</code> on export.</li>
+<li>Filenames: one dot only (the extension). Extra dots make BPE2 misread the extension, so BRIAGE appends <code>.safe</code> (§9.7).
+The Kuju samples use a <code>[00]</code> prefix convention (<code>[00]sample_engine_id01</code>). <span class="pill v">verified</span></li>
+<li><b>Texture path mapping</b> (BRIAGE §4.5): “write from *.IGS destination” (new mode, recommended) points the IGS at the files
+Blender uses. Set a <b>Textures directory</b> so every texture is routed to one folder (e.g. <code>…\Engine\Textures</code>).</li>
+<li>Same drive for .blend, textures and export target, or the texture is dropped with “Please export to the same drive…” (§9.3).</li>
+<li>Animated textures (flashing beacons): name frames <code>x_anim1.dds</code>, <code>x_anim2.dds</code>…, tick Animate UVs with #Frames and FPS,
+then force-export the extra frames in BPE2, since only frame 1 is referenced by the IGS (BRIAGE §6.4).</li>
+</ul>
+
+<h1>8 · Special objects</h1>
+<div class="two">
+<div>
+<h3>Lights</h3>
+<p>Two halves: the <b>glow mesh</b> in Blender (<code>light_fwdhead</code>, <code>light_fwdtail</code>, <code>light_revhead</code>, <code>light_revtail</code>,
+additive material) and the actual <b>light source</b>, which is a child entity added in the vehicle blueprint's
+<code>ContainerComponent</code>. The keywords <code>_lights_fwdhead</code> etc. keep the meshes separate so the game can switch
+them with direction.</p>
+<h3>Running numbers</h3>
+<p>Object <code>1_yyyy_primarydigits_N</code> (N = digit count), faces assigned to materials <code>primarynumber_0</code> (units),
+<code>primarynumber_1</code> (tens)… using <code>TrainDecal.fx</code>. The blueprint's named texture set supplies digit images and the
+numbering CSV supplies the numbers (BRIAGE §10.6). Each TextureName entry must be exactly one ASCII character.</p>
+</div>
+<div>
+<h3>Shadows</h3>
+<p>Low-poly closed shells, named <code>1_0400_shadow_&lt;part&gt;</code>, parented to the part they shadow at local origin, material
+<code>shadow_…</code> with <code>StencilShadow.fx</code>. The sample has one per body, bogie and wheel. <span class="pill v">verified</span></p>
+<h3>Collision geometry</h3>
+<p>The sample references a separate collision IGS (<code>Sample_Engine.IGS</code>) in addition to the box in the blueprint. A simple
+closed hull is enough.</p>
+<h3>Snap points (scenery only)</h3>
+<p>“Arrows” empties named <code>#ss_</code>, <code>#st_</code>, <code>#sb_</code> + name, Z pointing outwards, no children (BRIAGE §8.2).</p>
+</div>
+</div>
+
+<h1>9 · Levels of detail</h1>
+<ul>
+<li>LOD&nbsp;n+1 is a <b>child</b> of LOD&nbsp;n with the <b>same base name</b> and a <b>larger distance</b> (<code>1_0500_engine</code> → <code>2_1200_engine</code>).
+Break any of the three and you get “Inconsistent LODing” or offset objects (BRIAGE §9.10).</li>
+<li>Keep the LOD twin at local (0,0,0) under its parent.</li>
+<li><b>Watch hidden twins.</b> The sample hides <code>2_1200_engine</code> in the viewport. With <b>Visible children</b> ticked BRIAGE exports only visible
+children (§4.2), so a hidden LOD disappears. Either untick Visible children or keep LODs visible in a dedicated collection.</li>
+</ul>
+
+<h1>10 · The cab</h1>
+<p>The cab is a <b>separate IGS</b> (<code>sample_cab.igs</code>), referenced by the engine blueprint's <code>InteriorGeometryID</code>. Build it
+<b>in vehicle coordinates</b>, in place at the front of the loco. The sample cab spans 7.22–9.16&nbsp;m forward and its throttle sits at
+(−0.808,&nbsp;2.183,&nbsp;8.709) in file axes. <span class="pill v">verified</span></p>
+<figure>
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <defs><marker id="c10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker></defs>
+  <rect x="10" y="20" width="200" height="170" rx="6" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="20" y="40" font-weight="bold">Blender (cab scene)</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+  <text x="20" y="62">1_0000_cab       (static)</text><text x="20" y="80">1_0000_throttle  origin=hinge</text>
+  <text x="20" y="98">1_0000_brake</text><text x="20" y="116">1_0000_reverser</text><text x="20" y="134">1_0000_horn</text><text x="20" y="152">1_0000_needle</text><text x="20" y="170">1_0000_start ✘ (empty)</text></g>
+  <rect x="260" y="20" width="200" height="170" rx="6" fill="#fff" stroke="#16324f"/>
+  <text x="270" y="40" font-weight="bold">sample_cab.igs nodes</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+  <text x="270" y="62">cab</text><text x="270" y="80">throttle</text><text x="270" y="98">brake</text><text x="270" y="116">reverser</text><text x="270" y="134">horn</text><text x="270" y="152">needle</text><text x="270" y="170" fill="#b3261e">(no “start”)</text></g>
+  <rect x="510" y="20" width="200" height="170" rx="6" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="520" y="40" font-weight="bold">Engine bp controls</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9">
+  <text x="520" y="62">Regulator → "throttle"</text><text x="520" y="80">TrainBrake… → "brake"</text><text x="520" y="98">Reverser → "reverser"</text><text x="520" y="116">Horn → "horn"</text><text x="520" y="134">Speedometer → "needle"</text><text x="520" y="152" fill="#b3261e">EngineStart → "start" ✘</text></g>
+  <g stroke="#1f6fb2" stroke-width="1.5" marker-end="url(#c10)"><line x1="210" y1="100" x2="256" y2="100"/><line x1="508" y1="100" x2="464" y2="100"/></g>
+</svg>
+<figcaption><b>Figure 2.4 · Cab pick nodes.</b> Every interactive control is its own object; its base name is the
+<code>PickTransformName</code> in the blueprint. In the sample, the start button exists in Blender only as an empty, so no
+<code>start</code> node is exported and the blueprint's link is dead. <span class="pill v">verified</span></figcaption>
+</figure>
+<ul>
+<li>Give every control its own object with its origin on the hinge and its rest pose (the control's <b>minimum</b>) on frame 0.</li>
+<li>Duplicates such as <code>2_0000_throttle</code>/<code>3_0000_throttle</code> in the sample are LOD levels (the cab GEO has LOD controllers with
+2 and 3 levels, all at max distance), not pressed/released states. <span class="pill v">verified</span></li>
+<li>Glass uses <code>weatherglass_N</code> materials if you want rain and wiper effects.</li>
+<li>With <code>NumberOfCabs = eDoubleCab</code> the sample uses one cab model for both ends. <span class="pill u">check</span> how your build treats the rear cab before modelling a second one.</li>
+</ul>
+
+<h1>11 · Exporting the IGS with BRIAGE</h1>
+<p>BRIAGE's IGS settings live in <b>Properties ▸ Scene</b> (per scene). Recommended starting configuration:</p>
+<table>
+<thead><tr><th style="width:44mm">Setting (BRIAGE §)</th><th style="width:40mm">Exterior</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Export mode (4.2)</td><td>Export visible</td><td>Use “Export selected” only for quick part tests</td></tr>
+<tr><td>Visible children (4.2)</td><td>Off</td><td>On would drop hidden LOD twins</td></tr>
+<tr><td>Hierarchy processing (4.2, 4.7)</td><td>On</td><td>Merges static parts; turn off for tiny models</td></tr>
+<tr><td>Export skinned geometry (4.2)</td><td>Off</td><td>Only for armature-deformed meshes (Skin*.fx shaders)</td></tr>
+<tr><td>Main object (4.4)</td><td><code>1_0500_engine</code></td><td>Explicit beats “active object”</td></tr>
+<tr><td>Main object center (4.4)</td><td>X only</td><td>Guarantees the model is centred across the rails; also applied to IA export</td></tr>
+<tr><td>Texture path mapping (4.5)</td><td>write from *.IGS destination</td><td>With a Textures directory set</td></tr>
+<tr><td>Custom keywords (4.7)</td><td>every separately animated object</td><td>Unless its name already contains a keyword</td></tr>
+<tr><td>Object rename (4.8)</td><td><code>.001</code> → (empty)</td><td>Strips Blender duplicate suffixes on the fly</td></tr>
+<tr><td>Verbose (4.3)</td><td>Off</td><td>Turn on only to debug (5× slower)</td></tr>
+<tr><td>Early tests mode (4.6)</td><td>Off</td><td>On lets a half-textured model export with a stand-in material</td></tr>
+</tbody></table>
+<ol class="steps">
+<li>Run the toolkit's <b>Validate</b> (Part&nbsp;7). Fix every ERROR.</li>
+<li>Press <b>Export</b> in BRIAGE's IGS panel; target <code>…\Default\Engine\YourLoco.igs</code> (cab: <code>…\Default\CabView\YourLoco_cab.igs</code>).</li>
+<li>Open the system console (Window ▸ Toggle System Console) and read the short log: name substitutions, the <b>Groups list</b>, materials with
+shader/first texture/UV arguments, and the texture list (BRIAGE §8.4.2).</li>
+<li>Only then go to BPE2 (Part&nbsp;4).</li>
+</ol>
+
+<h1>12 · Pre-export checklist</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Check</th><th style="width:40mm">Toolkit catches it</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>Every exported object named <code>L_DDDD_name</code>, ≤ 24 characters, no <code>.001</code></td><td>Yes</td></tr>
+<tr><td>☐</td><td>LOD children: same base name, parent is LOD n−1, larger distance</td><td>Yes</td></tr>
+<tr><td>☐</td><td>Scale applied everywhere, no negative scale</td><td>Yes</td></tr>
+<tr><td>☐</td><td>Body origin at 0,0,0; wheels touch Z = 0; bo01 at +Y</td><td>Yes</td></tr>
+<tr><td>☐</td><td>Every animated part is a separate node (keyword or custom keyword)</td><td>Partly (log check)</td></tr>
+<tr><td>☐</td><td>Rest pose on frame 0; linear interpolation on control animations</td><td>Yes</td></tr>
+<tr><td>☐</td><td>Every mesh has a UV map and a material; no unused material slots</td><td>Yes</td></tr>
+<tr><td>☐</td><td>Every material has a TSC shader and the right number of texture slots</td><td>No: read BRIAGE's error</td></tr>
+<tr><td>☐</td><td>Textures on the same drive, one dot in the name, power-of-two size</td><td>Drive and dots: yes</td></tr>
+<tr><td>☐</td><td>Under 256 objects; no node with more than 24 children</td><td>Yes</td></tr>
+</tbody></table>
+
+</body></html>

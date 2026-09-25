@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 0 — Start Here</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 0</div>
+    <h1>Start Here: the whole pipeline on one page</h1>
+    <div class="sub">How a Blender model becomes a drivable locomotive or a hauled wagon in Train Sim Classic,
+      using Blender&nbsp;3D + BRIAGE, Blueprint Editor&nbsp;2, Lua and the game itself, and where the friction is.</div>
+  </div>
+  <div class="toc">
+    <h3>The guide set</h3>
+    <table>
+      <thead><tr><th style="width:18mm">Part</th><th style="width:62mm">Title</th><th>What you get from it</th></tr></thead>
+      <tbody>
+        <tr><td><b>0</b></td><td>Start Here</td><td>The pipeline map, folder layout, conventions, glossary.</td></tr>
+        <tr><td><b>1</b></td><td>What a TSC Vehicle Actually Is</td><td>The game's own view of a loco/wagon: blueprints, components, coordinate systems, the control-value bus, the physics chain.</td></tr>
+        <tr><td><b>2</b></td><td>Modelling in Blender for TSC</td><td>Scale, axes, origins, the LOD naming scheme, bogies and wheels, materials/shaders, textures, IGS export with BRIAGE.</td></tr>
+        <tr><td><b>3</b></td><td>Animations and IA Export</td><td>Pantographs, wipers, doors and cab levers; one .ia per animation; frame rules; linking to controls.</td></tr>
+        <tr><td><b>4</b></td><td>Blueprint Editor 2</td><td>Building the engine, wagon, bogie, simulation and cab blueprints; every important field; unit traps.</td></tr>
+        <tr><td><b>5</b></td><td>Lua Scripting</td><td>Script lifecycle, the Call/SysCall API, patterns for custom features (with a trolley-pole example).</td></tr>
+        <tr><td><b>6</b></td><td>Build, Test and Ship</td><td>Export/compile, preview, scenario testing, packaging and a symptom-to-fix troubleshooting table.</td></tr>
+        <tr><td><b>7</b></td><td>Removing Workflow Friction</td><td>The Blender TSC Toolkit add-on and the cross-check tool shipped with this guide, and further script ideas.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot">Sources: Kuju/DTG sample vehicles (Sample Electric Engine, Example Steam Engine) supplied with this project,
+    their Blender scene reads and raw geometry exports, the BRIAGE user manual v2.5.786, the community TS2015 scripting reference,
+    and the project's own design specs. Where a statement is checked against those files it is marked
+    <span class="pill v">verified</span>; where it must be confirmed in your own tools it is marked <span class="pill u">check</span>.</div>
+</section>
+
+<h1>The pipeline at a glance</h1>
+<p>Every Train Sim Classic (TSC) vehicle goes through the same five stages. Blender makes the <em>shape</em>,
+BRIAGE converts it into the game's intermediate formats, Blueprint Editor&nbsp;2 (BPE2) describes <em>what the shape is</em>
+(mass, bogies, controls, physics, scripts), the export step compiles everything, and the game loads the compiled result.</p>
+
+<figure>
+<svg viewBox="0 0 720 372" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker>
+    <marker id="arT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#177a6e"/></marker>
+  </defs>
+  <!-- toolkit lane -->
+  <rect x="8" y="6" width="704" height="44" rx="6" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="18" y="22" font-weight="bold" fill="#177a6e">Friction removers shipped with this guide (Part 7)</text>
+  <text x="704" y="22" text-anchor="end" fill="#1b2330">tsc_crosscheck.py: blueprint ⇄ geometry check</text>
+  <text x="18" y="40" fill="#1b2330">TSC Toolkit (Blender): validate · auto-name · measure → bogie XML + blueprint patch · IA jobs · Lua skeleton</text>
+
+  <!-- stage boxes -->
+  <g>
+    <rect x="8" y="70" width="128" height="170" rx="6" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+    <rect x="8" y="70" width="128" height="26" rx="6" fill="#16324f"/>
+    <text x="72" y="87" text-anchor="middle" fill="#fff" font-weight="bold">1 · Blender 3D</text>
+    <text x="16" y="113">Model the body,</text><text x="16" y="127">bogies, wheels, cab</text>
+    <text x="16" y="145">L_DDDD_ names</text><text x="16" y="159">(LOD + distance)</text>
+    <text x="16" y="177">Materials = TSC</text><text x="16" y="191">shaders + textures</text>
+    <text x="16" y="209">Keyframe moving</text><text x="16" y="223">parts (rest = frame 0)</text>
+
+    <rect x="152" y="70" width="128" height="170" rx="6" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+    <rect x="152" y="70" width="128" height="26" rx="6" fill="#16324f"/>
+    <text x="216" y="87" text-anchor="middle" fill="#fff" font-weight="bold">2 · BRIAGE</text>
+    <text x="160" y="113">Blender add-on</text>
+    <text x="160" y="131">IGSE → geometry</text><text x="160" y="145">(.igs, one per model)</text>
+    <text x="160" y="163">IAE → animation</text><text x="160" y="177">(.ia, one per anim)</text>
+    <text x="160" y="195">Writes straight into</text><text x="160" y="209">the Source folder</text>
+
+    <rect x="296" y="70" width="128" height="170" rx="6" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+    <rect x="296" y="70" width="128" height="26" rx="6" fill="#16324f"/>
+    <text x="360" y="87" text-anchor="middle" fill="#fff" font-weight="bold">3 · Blueprint Ed. 2</text>
+    <text x="304" y="113">Engine / wagon bp</text>
+    <text x="304" y="127">Bogie bps</text>
+    <text x="304" y="141">Engine simulation bp</text>
+    <text x="304" y="155">Cab + controls</text>
+    <text x="304" y="169">Curves (.csv)</text>
+    <text x="304" y="183">Script paths (.lua)</text>
+    <text x="304" y="201">XML here has the</text><text x="304" y="215">final say in game</text>
+
+    <rect x="440" y="70" width="128" height="170" rx="6" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+    <rect x="440" y="70" width="128" height="26" rx="6" fill="#16324f"/>
+    <text x="504" y="87" text-anchor="middle" fill="#fff" font-weight="bold">4 · Export</text>
+    <text x="448" y="113">BPE2 compiles:</text>
+    <text x="448" y="131">.igs → .GeoPcDx</text>
+    <text x="448" y="147">textures → .TgPcDx</text>
+    <text x="448" y="163">.xml → .bin</text>
+    <text x="448" y="179">.lua → .out</text>
+    <text x="448" y="199">Output lands in</text><text x="448" y="213">the Assets folder</text>
+
+    <rect x="584" y="70" width="128" height="170" rx="6" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+    <rect x="584" y="70" width="128" height="26" rx="6" fill="#16324f"/>
+    <text x="648" y="87" text-anchor="middle" fill="#fff" font-weight="bold">5 · Train Sim</text>
+    <text x="592" y="113">Scenario editor:</text><text x="592" y="127">enable Provider/</text><text x="592" y="141">Product, place it</text>
+    <text x="592" y="161">Drive (engine) or</text><text x="592" y="175">haul (wagon)</text>
+    <text x="592" y="195">Lua runs every</text><text x="592" y="209">frame; LogMate</text><text x="592" y="223">shows its output</text>
+  </g>
+  <g stroke="#1f6fb2" stroke-width="2" fill="none" marker-end="url(#ar)">
+    <line x1="136" y1="155" x2="150" y2="155"/><line x1="280" y1="155" x2="294" y2="155"/>
+    <line x1="424" y1="155" x2="438" y2="155"/><line x1="568" y1="155" x2="582" y2="155"/>
+  </g>
+  <!-- file badges -->
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+    <rect x="30" y="250" width="84" height="20" rx="10" fill="#e8f1fa" stroke="#1f6fb2"/><text x="72" y="264" text-anchor="middle">.blend</text>
+    <rect x="174" y="250" width="84" height="20" rx="10" fill="#e8f1fa" stroke="#1f6fb2"/><text x="216" y="264" text-anchor="middle">.igs  .ia</text>
+    <rect x="304" y="250" width="112" height="20" rx="10" fill="#e8f1fa" stroke="#1f6fb2"/><text x="360" y="264" text-anchor="middle">.xml .csv .lua</text>
+    <rect x="444" y="250" width="120" height="20" rx="10" fill="#e8f1fa" stroke="#1f6fb2"/><text x="504" y="264" text-anchor="middle">.GeoPcDx .bin .out</text>
+    <rect x="596" y="250" width="104" height="20" rx="10" fill="#fdf3e2" stroke="#a86400"/><text x="648" y="264" text-anchor="middle">in the world</text>
+  </g>
+  <!-- folders -->
+  <rect x="152" y="286" width="272" height="30" rx="4" fill="#f4f6f9" stroke="#8a96a6" stroke-dasharray="4 3"/>
+  <text x="288" y="300" text-anchor="middle" font-weight="bold" font-size="9.5">RailWorks\Source\Provider\Product\</text>
+  <text x="288" y="312" text-anchor="middle" fill="#5b6676" font-size="9">editable files: you work here</text>
+  <rect x="440" y="286" width="272" height="30" rx="4" fill="#f4f6f9" stroke="#8a96a6" stroke-dasharray="4 3"/>
+  <text x="576" y="300" text-anchor="middle" font-weight="bold" font-size="9.5">RailWorks\Assets\Provider\Product\</text>
+  <text x="576" y="312" text-anchor="middle" fill="#5b6676" font-size="9">compiled files: the game reads these</text>
+  <!-- toolkit arrows -->
+  <path d="M72,50 C72,60 72,62 72,68" stroke="#177a6e" stroke-width="1.6" fill="none" marker-end="url(#arT)"/>
+  <path d="M200,50 C280,58 330,60 350,68" stroke="#177a6e" stroke-width="1.6" fill="none" stroke-dasharray="5 3" marker-end="url(#arT)"/>
+  <path d="M640,50 C560,60 470,60 424,72" stroke="#177a6e" stroke-width="1.6" fill="none" stroke-dasharray="5 3" marker-end="url(#arT)"/>
+  <!-- loop back -->
+  <path d="M648,318 C648,346 72,346 72,272" stroke="#a86400" stroke-width="1.5" fill="none" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+  <text x="360" y="360" text-anchor="middle" fill="#a86400" font-size="9">iterate: fix in Blender or BPE2 → re-export → retest (keep this loop short)</text>
+</svg>
+<figcaption><b>Figure 0.1 · The five stages and what each produces.</b> The teal lane is the tooling from Part&nbsp;7 that
+removes the manual copy-paste steps (measuring bogie pivots, re-typing coupling positions, checking node names).
+Everything left of the Export box lives in <code>Source</code>; everything the game loads lives in <code>Assets</code>.</figcaption>
+</figure>
+
+<h2>Where the friction actually comes from</h2>
+<p>Converting a model is rarely hard because of one big problem. It is slow because of many small <em>disagreements</em>
+between three descriptions of the same vehicle: the Blender scene, the exported geometry, and the XML blueprints.
+The sample electric locomotive supplied with this project shows every one of them:</p>
+<table>
+  <thead><tr><th style="width:44mm">Disagreement</th><th>Example found in the Kuju sample electric</th><th style="width:36mm">Fixed by</th></tr></thead>
+  <tbody>
+    <tr><td>Bogie pivot vs mesh</td><td>Front bogie modelled at 5.583&nbsp;m, blueprint pivots it at 6.25&nbsp;m. The blueprint wins, so the bogie turns about a point 0.67&nbsp;m ahead of where it is drawn. <span class="pill v">verified</span></td><td>Toolkit “Measure + Patch”</td></tr>
+    <tr><td>Wheel radius vs wheel height</td><td>Wheel centres at 0.525&nbsp;m above the rail, radius set to 0.55&nbsp;m. <span class="pill v">verified</span></td><td>Validate + Measure</td></tr>
+    <tr><td>Blueprint names a node the mesh lacks</td><td><code>EngineStart</code> clicks node <code>start</code> and the pantograph lamp uses <code>hs_aus_lit</code>; neither exists in the cab geometry. <span class="pill v">verified</span></td><td><code>tsc_crosscheck.py</code></td></tr>
+    <tr><td>Collision box vs model</td><td>Box is 18&nbsp;m long and 4.0&nbsp;m high; the model is 19.12&nbsp;m long and 4.53&nbsp;m high. <span class="pill v">verified</span></td><td>Measure + Patch</td></tr>
+    <tr><td>Spawn defaults</td><td><code>TrainBrakeControl</code> defaults to 0.7, so the loco spawns with its brakes 70% applied. <span class="pill v">verified</span></td><td>Cross-check lint</td></tr>
+    <tr><td>Stray data</td><td>An extra Blender-only material slot <code>f1</code> on the body; leftover “Class 47” names in the cab blueprint. <span class="pill v">verified</span></td><td>Validate</td></tr>
+  </tbody>
+</table>
+<p>The guide's strategy is simple: <b>make Blender the single source of truth for anything geometric</b>, generate
+or patch the blueprint fields from it, and <b>check the links automatically</b> (node names, animation IDs, control names)
+instead of by eye. Everything behavioural (physics, controls, scripts) stays in BPE2 and Lua, where it belongs.</p>
+
+<h2>Before you start: tool versions</h2>
+<div class="box warn"><span class="t">Check your Blender ⇄ BRIAGE pairing <span class="pill u">check</span></span>
+<p>The BRIAGE manual supplied with this project (v2.5.786) is written for <b>Blender 2.7x</b>: its material panel uses the
+Blender Render/Game engines and texture slots, which were removed in Blender 2.8. The Blender scene reads of the sample
+loco, however, show <b>layered actions</b> (“1 layer, 1 slot”), a feature of Blender 4.4 and later.</p>
+<p>So before you begin, confirm which BRIAGE build you have and which Blender it runs in. Two workable set-ups:</p>
+<ul>
+<li><b>Single Blender</b>: a BRIAGE build that supports your modern Blender. Material options may sit in different panels from
+the 2.7x manual, but the concepts in Part&nbsp;2 (shader name, texture slot order, IGS options) are the same.</li>
+<li><b>Two Blenders</b>: model and animate in a modern Blender, then open or append the model into a Blender&nbsp;2.79 install
+that runs BRIAGE 2.5 and export from there. The TSC Toolkit targets Blender 4.2+; run its checks in the modelling Blender.</li>
+</ul></div>
+
+<h2>Folder layout you will work in</h2>
+<div class="two">
+<div>
+<figure>
+<svg viewBox="0 0 330 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+  <g fill="#1b2330">
+  <text x="6" y="16" font-weight="bold">RailWorks\</text>
+  <text x="18" y="34">Source\</text>
+  <text x="30" y="52" font-weight="bold" fill="#1f6fb2">MyProvider\MyProduct\</text>
+  <text x="42" y="70">RailVehicles\Electric\MyLoco\</text>
+  <text x="54" y="88">Default\Engine\   ← .igs .ia .xml</text>
+  <text x="54" y="106">Default\Bogies\   ← bogie .xml</text>
+  <text x="54" y="124">Default\CabView\  ← cab .igs .ia</text>
+  <text x="54" y="142">Default\Simulation\← sim .xml .csv</text>
+  <text x="54" y="160">Default\Engine\Textures\</text>
+  <text x="54" y="178">Audio\ (optional)</text>
+  <text x="18" y="202">Assets\</text>
+  <text x="30" y="220" font-weight="bold" fill="#a86400">MyProvider\MyProduct\…</text>
+  <text x="42" y="238" fill="#5b6676">same tree, compiled (.bin .GeoPcDx …)</text>
+  </g>
+  <g stroke="#8a96a6"><line x1="12" y1="20" x2="12" y2="198"/><line x1="24" y1="38" x2="24" y2="180"/></g>
+</svg>
+<figcaption><b>Figure 0.2 · Source and Assets mirror each other.</b> The Kuju samples use exactly this layout
+(<code>RailVehicles\Electric\EngineSample\Default\Engine\…</code>). <span class="pill v">verified</span></figcaption>
+</figure>
+</div>
+<div>
+<h4>Rules that save hours</h4>
+<ul>
+<li>Work <b>inside</b> <code>Source\Provider\Product</code>. Save the .blend and all textures on the <b>same drive</b>;
+BRIAGE refuses to reference textures across drives.</li>
+<li>Pick your <b>Provider</b> and <b>Product</b> names once. Every blueprint reference stores them
+(the samples use <code>Developer\Addon</code>).</li>
+<li>One vehicle = one folder. Share bogies, textures and scripts between variants by pointing
+blueprints at the same files instead of copying them.</li>
+<li>Avoid dots in file names apart from the extension (BRIAGE appends <code>.safe</code> otherwise) and avoid spaces in anything a script will name.</li>
+<li>Keep the .blend under version control (git works well; the repo holding this guide is one).</li>
+</ul>
+</div>
+</div>
+
+<h2>Conventions used in every part</h2>
+<table>
+  <thead><tr><th style="width:40mm">Convention</th><th>Meaning</th></tr></thead>
+  <tbody>
+  <tr><td>Blender axes</td><td>X = right, <b>Y = forward</b>, Z = up. The front of the vehicle points along +Y.</td></tr>
+  <tr><td>TSC file axes</td><td>X = right, <b>Y = up</b>, <b>Z = forward</b>. BRIAGE swaps Y/Z for you on export. <span class="pill v">verified</span> (all 33 exterior transforms match after the swap)</td></tr>
+  <tr><td>Blueprint 2D fields</td><td>Fields such as <code>FrontPivotX</code>, <code>BogeyPivotX</code>, <code>CollisionCentreX</code> use X = <b>along the track</b> and Y = <b>height</b>.</td></tr>
+  <tr><td><code>1_0500_engine</code></td><td>LOD level 1, visible up to 500&nbsp;m, object name <code>engine</code>. See Part&nbsp;2.</td></tr>
+  <tr><td><span class="pill v">verified</span></td><td>Checked against the supplied sample files or their exports.</td></tr>
+  <tr><td><span class="pill u">check</span></td><td>Community knowledge or inference: confirm in your own BPE2 / game build.</td></tr>
+  </tbody>
+</table>
+
+<h2>Glossary</h2>
+<table>
+  <thead><tr><th style="width:36mm">Term</th><th>Meaning</th></tr></thead>
+  <tbody>
+  <tr><td>Blueprint</td><td>An XML file describing one kind of object (engine, wagon, bogie, simulation, scenery…). Edited in BPE2, compiled to <code>.bin</code>.</td></tr>
+  <tr><td>BPE2</td><td>Blueprint Editor 2, the Kuju/DTG tool shipped with TSC for editing blueprints and exporting (compiling) them.</td></tr>
+  <tr><td>BRIAGE</td><td>BlendeR Intermediate Animation and Geometry Exporter: writes <code>.igs</code> (IGSE module) and <code>.ia</code> (IAE module).</td></tr>
+  <tr><td>.igs / .GeoPcDx</td><td>Intermediate geometry (from BRIAGE) / compiled geometry (from BPE2 export).</td></tr>
+  <tr><td>.ia</td><td>Intermediate animation: node positions and rotations over time, no scale.</td></tr>
+  <tr><td>Node / transform</td><td>A named object inside the geometry (e.g. <code>bo01</code>, <code>throttle</code>). Blueprints refer to nodes by name.</td></tr>
+  <tr><td>LOD</td><td>Level of detail: alternative versions of a node shown at different camera distances.</td></tr>
+  <tr><td>Control value</td><td>A named float on a vehicle (e.g. <code>Regulator</code>). The shared “bus” between cab, physics, script, animation and sound (Part&nbsp;1).</td></tr>
+  <tr><td>Subsystem</td><td>The powertrain model inside an engine simulation blueprint: diesel-electric, electric or steam.</td></tr>
+  <tr><td>Consist</td><td>A train: an ordered list of vehicles coupled together.</td></tr>
+  <tr><td>serz.exe</td><td>TSC's converter between <code>.bin</code> and <code>.xml</code>. Useful for inspecting compiled files.</td></tr>
+  <tr><td>LogMate</td><td>TSC's log viewer. Lua <code>print()</code> output and engine messages appear here.</td></tr>
+  </tbody>
+</table>
+
+<div class="box tip"><span class="t">How to use this set</span>
+<p>Read Part&nbsp;1 once. It explains why every later rule exists. Then keep Parts&nbsp;2–6 open as a checklist while you build, and install
+the toolkit from Part&nbsp;7 on day one: it is cheaper to catch a naming or pivot mistake in Blender than after an export round-trip.</p></div>
+
+</body></html>

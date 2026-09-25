@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 5 — Lua Scripting</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 5</div>
+    <h1>Lua scripting: custom features on top of the simulation</h1>
+    <div class="sub">Scripts cannot rewrite TSC's physics, but they can read and write every control value, move animations, switch nodes,
+      talk to the rest of the consist and show messages. That is enough to build trolley poles, thermal damage, interlocks and safety systems.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Where scripts live and how they are compiled</li>
+    <li>The callbacks the game calls</li>
+    <li>The API: Call and SysCall</li>
+    <li>The architecture every good vehicle script shares</li>
+    <li>Pattern: the virtual control</li>
+    <li>Worked example: dual trolley pole (tested)</li>
+    <li>Sketch: voltage selector and thermal damage</li>
+    <li>Talking to the rest of the train</li>
+    <li>Debugging</li>
+    <li>Pitfalls</li>
+  </ol></div>
+  <div class="foot">API names come from the community “TS2015 Scripting Reference” supplied with this project (itself unofficial and marked work in
+  progress) and the Kuju sample scripts. The trolley-pole script ships as <code>examples/lua/TrolleyPole.lua</code> and passes an offline test
+  (<code>tools/lua_mock/run_trolley_test.py</code>) against a mock of the API.</div>
+</section>
+
+<h1>1 · Where scripts live and how they are compiled</h1>
+<ul>
+<li>A blueprint's <code>ScriptComponent</code> holds a path to a <code>.lua</code> file. The sample electric has <b>two</b>: the engine blueprint points at
+<code>Sample_EngineScript.lua</code> and the engine simulation blueprint at <code>Electric Engine Simulation.lua</code>. <span class="pill v">verified</span>
+Keep your logic in one of them (normally the engine blueprint's) and leave the other empty or absent to avoid two scripts fighting over controls.</li>
+<li>BPE2's Export compiles <code>.lua</code> to <code>.out</code> in Assets. The game runs the <code>.out</code>. A syntax error fails the export, so read the output pane.</li>
+<li>Wagons and tenders can have scripts too (doors, lamps, loads).</li>
+<li>TSC embeds an older Lua. Write conservatively: avoid the <code>#</code> length and <code>%</code> modulo operators and newer library calls.
+<span class="pill u">check</span> the exact version against your build; the example script already follows this rule.</li>
+</ul>
+
+<h1>2 · The callbacks the game calls</h1>
+<table>
+<thead><tr><th style="width:50mm">Function you define</th><th>When it runs</th><th style="width:48mm">Use it for</th></tr></thead>
+<tbody>
+<tr><td><code>Initialise()</code></td><td>Once at scenario load, before the route is ready</td><td>Variables; <code>Call("*:BeginUpdate")</code></td></tr>
+<tr><td><code>Setup()</code></td><td>Once when the script is initialised (e.g. when the player clicks the consist)</td><td>Player-specific setup</td></tr>
+<tr><td><code>Update(interval)</code></td><td>Every frame after BeginUpdate; <code>interval</code> = seconds since the last frame</td><td>All continuous logic</td></tr>
+<tr><td><code>OnControlValueChange(name, index, value)</code></td><td>When the player moves a cab control</td><td>Intercepting and filtering input</td></tr>
+<tr><td><code>OnConsistMessage(id, content, direction)</code></td><td>A message from another vehicle arrives</td><td>Multiple units, wagon doors</td></tr>
+<tr><td><code>OnCameraEnter(cabEnd, carriageCam)</code> / <code>OnCameraLeave()</code></td><td>The camera enters/leaves a cab or passenger view</td><td>Cab sounds, occlusion</td></tr>
+<tr><td><code>OnCustomSignalMessage(message)</code></td><td>A signal or track marker on the route sends a string</td><td>Voltage zones, bad-wire markers</td></tr>
+</tbody></table>
+<div class="box rule"><span class="t">Once you define OnControlValueChange, you own every control write</span>
+<p>Both Kuju sample scripts contain only one function, and it does exactly this:</p>
+<pre><span class="k">function</span> OnControlValueChange(name, index, value)
+  <span class="k">if</span> Call(<span class="s">"*:ControlExists"</span>, name, index) <span class="k">then</span>
+    Call(<span class="s">"*:SetControlValue"</span>, name, index, value)
+  <span class="k">end</span>
+<span class="k">end</span></pre>
+<p>If you define the callback and forget to write the value back, levers stop working. Note the sample's test: <code>ControlExists</code> returns
+<b>1 or 0</b>, and in Lua <b>0 is true</b> (only <code>nil</code> and <code>false</code> are false). The Kuju check therefore always passes. Write
+<code>== 1</code>. <span class="pill v">verified</span></p></div>
+
+<h1>3 · The API: Call and SysCall</h1>
+<p><code>Call("target:Method", …)</code> talks to an entity. <code>"*:"</code> means “this vehicle and all its children”; <code>"Main Smoke Stack:"</code>
+targets the child entity of that name. <code>SysCall("Manager:Method", …)</code> talks to game-wide managers.</p>
+<table>
+<thead><tr><th style="width:74mm">Call</th><th>Returns / notes</th></tr></thead>
+<tbody>
+<tr><td><code>Call("*:GetControlValue", name, 0)</code></td><td>Current value of a control</td></tr>
+<tr><td><code>Call("*:SetControlValue", name, 0, v)</code></td><td>Writes a control (the bus, Part&nbsp;1)</td></tr>
+<tr><td><code>Call("*:ControlExists", name, 0)</code></td><td>1 or 0 (compare with <code>== 1</code>)</td></tr>
+<tr><td><code>Call("*:LockControl", name, 0, 1|0)</code></td><td>Lock a control against the player (incompletely documented)</td></tr>
+<tr><td><code>Call("*:GetSpeed")</code> / <code>GetAcceleration</code></td><td>m/s and m/s²</td></tr>
+<tr><td><code>Call("*:GetGradient")</code></td><td>Track grade</td></tr>
+<tr><td><code>Call("*:GetCurvature")</code> / <code>GetCurvatureAhead(d)</code></td><td>1 / radius in metres (0 = straight)</td></tr>
+<tr><td><code>Call("*:GetTractiveEffort")</code></td><td>Current TE (fraction of MaxForce per the reference; <code>GetControlValue("TractiveEffort")</code> gives klbf)</td></tr>
+<tr><td><code>Call("*:GetIsPlayer")</code> / <code>GetIsEngineWithKey</code></td><td>1/0: is this the player's train / the driven engine</td></tr>
+<tr><td><code>Call("*:GetSimulationTime")</code></td><td>Seconds since the scenario started</td></tr>
+<tr><td><code>Call("*:GetTotalMass")</code> / <code>GetConsistTotalMass</code> / <code>GetConsistLength</code></td><td>tonnes / tonnes / metres</td></tr>
+<tr><td><code>Call("*:GetCurrentSpeedLimit")</code>, <code>GetNextSpeedLimit(dir, dist)</code></td><td>m/s; next limit returns type, speed, distance</td></tr>
+<tr><td><code>Call("*:GetNextRestrictiveSignal", dir, dist)</code></td><td>type, state, distance, aspect</td></tr>
+<tr><td><code>Call("*:AddTime", animID, seconds)</code> / <code>Call("*:Reset", animID)</code></td><td>Advance / rewind an animation; AddTime returns non-zero at the end</td></tr>
+<tr><td><code>Call("*:ActivateNode", nodeName, 1|0)</code></td><td>Show / hide a geometry node (mesh swaps, lamps)</td></tr>
+<tr><td><code>Call("child:SetText", text, 0|1)</code></td><td>Dynamic text on a child</td></tr>
+<tr><td><code>Call("light:Activate", 1|0)</code>, <code>SetRange</code>, <code>SetColor(r,g,b)</code></td><td>Light children</td></tr>
+<tr><td><code>Call("emitter:SetEmitterActive", 1|0)</code>, <code>SetEmitterRate</code>, <code>SetEmitterColour</code></td><td>Smoke, steam, sparks</td></tr>
+<tr><td><code>Call("*:SendConsistMessage", id, content, dir)</code></td><td>Message along the train</td></tr>
+<tr><td><code>Call("ControlSound:SetParameter", sound, v)</code></td><td>Drive a sound parameter</td></tr>
+<tr><td><code>SysCall("ScenarioManager:ShowAlertMessageExt", head, msg, secs, 0)</code></td><td>Pop-up alert (4th argument required, use 0)</td></tr>
+<tr><td><code>SysCall("ScenarioManager:ShowMessage", msg)</code>, <code>ShowInfoMessageExt(…)</code></td><td>Messages / info boxes</td></tr>
+<tr><td><code>SysCall("ScenarioManager:GetTimeOfDay")</code>, <code>GetSeason</code></td><td>Seconds since midnight; 0 spring … 3 winter</td></tr>
+<tr><td><code>SysCall("ScenarioManager:TriggerScenarioFailure", msg)</code></td><td>End the scenario (e.g. terminal burnout)</td></tr>
+</tbody></table>
+<p class="small">Calls seen in design snippets but <b>absent from the reference</b>: <code>Call("PlaySound", …)</code>, <code>SysCall("ScenarioManager:ShowAlertMessage", …)</code>
+(without Ext), <code>SetTime</code>. <span class="pill u">check</span> before use. Sounds are normally driven by control values that the sound blueprint listens to,
+which is how the example script does it.</p>
+
+<h1>4 · The architecture every good vehicle script shares</h1>
+<figure>
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b4fa0"/></marker></defs>
+  <rect x="10" y="30" width="150" height="160" rx="6" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="20" y="50" font-weight="bold">1 · Read</text><text x="20" y="70">player controls</text><text x="20" y="86">speed, curvature</text><text x="20" y="102">gradient, time</text><text x="20" y="118">route messages</text><text x="20" y="134">consist messages</text>
+  <rect x="190" y="30" width="340" height="160" rx="6" fill="#f3effa" stroke="#6b4fa0" stroke-width="1.6"/>
+  <text x="200" y="50" font-weight="bold">2 · Update state (pure Lua)</text>
+  <rect x="205" y="62" width="150" height="54" rx="5" fill="#fff" stroke="#6b4fa0"/><text x="215" y="80" font-weight="bold">State machines</text><text x="215" y="96">pole: stowed, hoist,</text><text x="215" y="110">attached, falling</text>
+  <rect x="365" y="62" width="150" height="54" rx="5" fill="#fff" stroke="#6b4fa0"/><text x="375" y="80" font-weight="bold">Accumulators</text><text x="375" y="96">motor temp, health,</text><text x="375" y="110">brake heat, timers</text>
+  <rect x="205" y="124" width="310" height="54" rx="5" fill="#fff" stroke="#6b4fa0"/><text x="215" y="142" font-weight="bold">Rules</text><text x="215" y="158">interlocks, risk rolls, filters: output = f(input, state, dt)</text>
+  <rect x="560" y="30" width="150" height="160" rx="6" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="570" y="50" font-weight="bold">3 · Write</text><text x="570" y="70">real controls</text><text x="570" y="86">(Regulator, panto…)</text><text x="570" y="102">custom controls</text><text x="570" y="118">animations, nodes</text><text x="570" y="134">emitters, lights</text><text x="570" y="150">alerts</text>
+  <g stroke="#6b4fa0" stroke-width="2" marker-end="url(#m5)"><line x1="160" y1="110" x2="188" y2="110"/><line x1="530" y1="110" x2="558" y2="110"/></g>
+  <text x="360" y="212" text-anchor="middle" fill="#5b6676">Every Update(): read everything once → update state with dt → write everything once. Keep game calls at the edges.</text>
+</svg>
+<figcaption><b>Figure 5.1 · Read → update → write.</b> Keeping all <code>Call</code>s at the edges makes the middle testable offline, which is exactly how
+the trolley-pole script was tested without the game.</figcaption>
+</figure>
+<ul>
+<li>Scale everything by <code>interval</code> (dt). Frame rates vary; per-frame probabilities (like the spec's <code>math.random(1,500)</code>) make behaviour depend on fps.</li>
+<li>Gate expensive or player-only logic with <code>GetIsPlayer</code>. AI trains run the same script.</li>
+<li>Do one-time work that needs a spawned vehicle in the first <code>Update</code>, not in <code>Initialise</code>.</li>
+</ul>
+
+<h1>5 · Pattern: the virtual control</h1>
+<p>To put your own logic between the player and the physics, give the player a lever that writes a <b>custom</b> control, and let the script write
+the <b>real</b> one:</p>
+<figure>
+<svg viewBox="0 0 720 110" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1b2330"/></marker></defs>
+  <rect x="10" y="30" width="130" height="50" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="50" font-weight="bold">Cab lever</text><text x="20" y="66">pick “throttle”</text>
+  <rect x="170" y="30" width="150" height="50" rx="5" fill="#f5d08c" stroke="#a86400"/><text x="180" y="50" font-weight="bold">VirtualThrottle</text><text x="180" y="66">custom control 0–1</text>
+  <rect x="350" y="20" width="200" height="70" rx="5" fill="#f3effa" stroke="#6b4fa0"/><text x="360" y="40" font-weight="bold">Lua filter</text><text x="360" y="56">× voltage proportion (0.25–1.0)</text><text x="360" y="70">× health/100, + damage jitter</text><text x="360" y="84">0 if pole/panto down</text>
+  <rect x="580" y="30" width="130" height="50" rx="5" fill="#16324f"/><text x="590" y="50" font-weight="bold" fill="#fff">Regulator</text><text x="590" y="66" fill="#cfe3f5">read by the sim</text>
+  <g stroke="#1b2330" stroke-width="1.6" marker-end="url(#m6)"><line x1="140" y1="55" x2="168" y2="55"/><line x1="320" y1="55" x2="348" y2="55"/><line x1="550" y1="55" x2="578" y2="55"/></g>
+</svg>
+<figcaption><b>Figure 5.2 · Virtual control.</b> The lever's interface element points at <code>VirtualThrottle</code>; <code>Regulator</code> keeps its
+name so the simulation still finds it but has no lever of its own.</figcaption>
+</figure>
+
+<h1>6 · Worked example: dual trolley pole</h1>
+<p><code>examples/lua/TrolleyPole.lua</code> implements the revised trolley-pole spec. Its state machine per pole:</p>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1b2330"/></marker></defs>
+  <g font-weight="bold" text-anchor="middle">
+    <rect x="10" y="90" width="110" height="46" rx="23" fill="#8a96a6"/><text x="65" y="111" fill="#fff">STOWED</text><text x="65" y="126" fill="#fff" font-weight="normal" font-size="8.5">frame 0, locked</text>
+    <rect x="170" y="90" width="110" height="46" rx="23" fill="#1f6fb2"/><text x="225" y="111" fill="#fff">GROUNDED</text><text x="225" y="126" fill="#fff" font-weight="normal" font-size="8.5">frame 0, loose</text>
+    <rect x="330" y="20" width="110" height="46" rx="23" fill="#a86400"/><text x="385" y="41" fill="#fff">HOISTING</text><text x="385" y="56" fill="#fff" font-weight="normal" font-size="8.5">key held</text>
+    <rect x="510" y="90" width="120" height="46" rx="23" fill="#177a6e"/><text x="570" y="111" fill="#fff">ATTACHED</text><text x="570" y="126" fill="#fff" font-weight="normal" font-size="8.5">frame = wire height</text>
+    <rect x="330" y="160" width="110" height="46" rx="23" fill="#b3261e"/><text x="385" y="181" fill="#fff">FALLING</text><text x="385" y="196" fill="#fff" font-weight="normal" font-size="8.5">−50 frames/s</text>
+  </g>
+  <g stroke="#1b2330" stroke-width="1.4" fill="none" marker-end="url(#m7)">
+    <path d="M120,106 L168,106"/><path d="M168,122 L120,122"/>
+    <path d="M260,90 C290,60 300,45 328,43"/>
+    <path d="M440,43 C480,45 520,60 545,88"/>
+    <path d="M385,66 L385,158"/>
+    <path d="M560,136 C540,170 480,183 442,183"/>
+    <path d="M330,183 C290,183 240,170 225,138"/>
+  </g>
+  <g font-size="8.5" fill="#1b2330">
+    <text x="124" y="100">P / Shift+P</text>
+    <text x="236" y="58">press [ or ]</text>
+    <text x="480" y="52">reaches wire frame</text>
+    <text x="390" y="112">released early</text><text x="390" y="124">(slips)</text>
+    <text x="520" y="178">double tap, leading pole</text><text x="520" y="190">&gt; 7.5 mph, risk roll</text>
+    <text x="200" y="182">hits the roof (thud)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.3 · Pole states from the revision spec.</b> Power flows only while at least one pole is ATTACHED; the script drives
+<code>PantographControl</code> as the interlock (an assumption <span class="pill u">check</span>: that your electric subsystem gates traction on its pantograph input).</figcaption>
+</figure>
+
+<h3>What the blueprint must provide</h3>
+<table>
+<thead><tr><th style="width:56mm">Item</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td>Controls <code>PoleFrontKey</code>, <code>PoleRearKey</code></td><td>Held = 1 by the [ and ] keys through the input mapper</td></tr>
+<tr><td><code>PoleFrontStow</code>, <code>PoleRearStow</code>, <code>PoleHeightMode</code>, <code>PoleHeightAdjust</code></td><td>P / Shift+P, Alt+P, comma/period</td></tr>
+<tr><td><code>PoleFrontFrame</code>, <code>PoleRearFrame</code></td><td>Outputs for cab indicators (0–100)</td></tr>
+<tr><td><code>PoleSpark</code>, <code>PoleThud</code></td><td>One-frame pulses the sound blueprint triggers on</td></tr>
+<tr><td>AnimSet <code>poleFront</code>, <code>poleRear</code></td><td>0–100 frame .ia exported at 100&nbsp;fps (Part&nbsp;3 §7)</td></tr>
+<tr><td>Nodes <code>pole_front</code>/<code>pole_front_stowed</code> (and rear)</td><td>Mesh swap for the stowed state via <code>ActivateNode</code></td></tr>
+</tbody></table>
+
+<h3>Core of the script</h3>
+<pre><span class="c">-- Position an exterior animation at an absolute frame with documented calls only</span>
+<span class="k">local function</span> showFrame(pole)
+  Call(<span class="s">"*:Reset"</span>, pole.anim)
+  <span class="k">if</span> pole.frame &gt; 0 <span class="k">then</span>
+    Call(<span class="s">"*:AddTime"</span>, pole.anim, pole.frame / ANIM_FPS)
+  <span class="k">end</span>
+  set(pole.out, pole.frame)
+<span class="k">end</span>
+
+<span class="c">-- ATTACHED: follow the wire, roll for detachment (scaled by dt, not per frame)</span>
+<span class="k">elseif</span> pole.state == SEATED <span class="k">then</span>
+  pole.frame = target
+  <span class="k">if</span> leading <span class="k">and not</span> held <span class="k">and</span> mph &gt; LEADING_LIMIT_MPH <span class="k">then</span>
+    enter(pole, FALLING)
+  <span class="k">else</span>
+    <span class="k">local</span> risk = detachRisk(pole, leading, held, mph)
+    <span class="k">if</span> risk &gt; RISK_THRESHOLD <span class="k">and</span> math.random() &lt; (risk / 500) * RISK_PER_SECOND * 60 * dt <span class="k">then</span>
+      enter(pole, FALLING)
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">elseif</span> pole.state == FALLING <span class="k">then</span>
+  pole.frame = pole.frame - FALL_RATE * dt          <span class="c">-- 92 → 0 takes 1.84 s, 65 → 0 takes 1.30 s</span></pre>
+
+<h3>Tested behaviour</h3>
+<p>The offline test drives the script at 60 updates per second against a mock API and checks 14 behaviours: starts stowed, unstow swaps meshes,
+hoists and seats at preset frame 65, positions the animation at 0.65&nbsp;s, stays up after release, double-tap de-wire, fall timing, power
+interlock on and off, the once-per-session reminder (and that it does not repeat), rolling re-wire, leading-pole detachment above 7.5&nbsp;mph,
+and Alt+P preset cycling. All pass.</p>
+
+<div class="box warn"><span class="t">Spec numbers worth revisiting</span><ul>
+<li>The gameplay spec's bad-wire alert fires at <b>50–70&nbsp;mph</b> and faster risk decay starts below <b>40&nbsp;mph</b>, while leading poles
+detach at <b>5–10&nbsp;mph</b>. For an interurban these may be intended; for street running they are very high. They are constants at the top of the script.</li>
+<li>The spec's pole range changed from 0.0–1.0 (original) to frames 0–100 (revision). The script follows the revision.</li>
+<li><code>GetCurvature</code> returns 1/radius in metres; the spec's formula has no unit, so the script uses curvature per km × mph × 0.1. Tune in game.</li>
+</ul></div>
+
+<h1>7 · Sketch: voltage selector and thermal damage</h1>
+<p>The advanced traction and thermal framework is a larger version of the same architecture. Its skeleton:</p>
+<pre><span class="k">function</span> Update(dt)
+  <span class="k">local</span> lineV   = gZoneVoltage <span class="k">or</span> DESIGN_VOLTAGE          <span class="c">-- from OnCustomSignalMessage zone markers; fallback = design</span>
+  <span class="k">local</span> mode    = get(<span class="s">"VoltageSelector"</span>)                   <span class="c">-- 0 = 600 V parallel, 1 = 1200 V series</span>
+  <span class="k">local</span> motorV  = (mode == 0) <span class="k">and</span> lineV <span class="k">or</span> lineV / 2
+  <span class="k">local</span> prop    = 0.5 * (motorV / 600)                      <span class="c">-- 0.25 starved, 0.5 normal, 1.0 overvolt</span>
+
+  <span class="c">-- Phase A: reversible heat; V² rule; fans scale with axle speed</span>
+  <span class="k">local</span> heat    = stress() * (motorV / 600) ^ 2
+  gMotorTemp    = clamp(gMotorTemp + (heat - cooling(mph)) * dt, 0, 100)
+  <span class="c">-- Phase B: irreversible health loss at 100 %, flashover and spin-down stress</span>
+  <span class="k">if</span> gMotorTemp &gt;= 100 <span class="k">then</span> gHealth = gHealth - MELT_RATE * dt <span class="k">end</span>
+  <span class="c">-- Phase C: virtual throttle</span>
+  set(<span class="s">"Regulator"</span>, get(<span class="s">"VirtualThrottle"</span>) * prop * 2 * (gHealth / 100) + jitter(gHealth))
+<span class="k">end</span></pre>
+<p>Brake fade follows the same shape (heat ∝ brake × speed, fade multiplier down to 0.2, cooling when released) and writes a scaled brake value
+through a virtual brake control. Flat spots use a hidden brake control pulsed for one frame per wheel revolution. Everything the framework needs
+is covered by <code>GetSpeed</code>, control reads/writes, <code>ActivateNode</code>, emitters and alerts.</p>
+
+<h1>8 · Talking to the rest of the train</h1>
+<ul>
+<li><code>Call("*:SendConsistMessage", id, content, direction)</code> sends a string along the consist; the receiver's <code>OnConsistMessage(id, content, direction)</code> fires.</li>
+<li>Forward messages you don't consume, so they reach the far end (the reference's convenience function does exactly this).</li>
+<li>Use your own numeric id range (e.g. 424200+) to avoid clashing with other vehicles' scripts.</li>
+<li>Direction encoding is inconsistent in the reference (0/1 when sending, 1/−1 when receiving). <span class="pill u">check</span> by logging both ends.</li>
+<li>Typical uses: multiple-unit throttle and pantograph, door commands to wagons, tail-lamp control on the last vehicle.</li>
+</ul>
+
+<h1>9 · Debugging</h1>
+<pre>DEBUG = <span class="k">true</span>
+<span class="k">function</span> DebugShowAlert(message, timeout)
+  <span class="k">if</span> DEBUG <span class="k">then</span>
+    SysCall(<span class="s">"ScenarioManager:ShowAlertMessageExt"</span>, <span class="s">"Debug"</span>, message, timeout <span class="k">or</span> 2, 0)
+  <span class="k">end</span>
+<span class="k">end</span></pre>
+<ul>
+<li><code>print()</code> output and script errors appear in <b>LogMate</b>. A runtime error usually stops the script for the rest of the session. Check
+LogMate first when a feature “just stops”.</li>
+<li>Show state on screen with alerts while developing; remove them or gate with <code>DEBUG</code> before release.</li>
+<li>Test logic offline: keep game calls at the edges (Figure 5.1) and run the script against a mock, as <code>tools/lua_mock/run_trolley_test.py</code> does.</li>
+</ul>
+
+<h1>10 · Pitfalls</h1>
+<table>
+<thead><tr><th style="width:58mm">Pitfall</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>if Call("…Exists") then</code> always true</td><td>Compare with <code>== 1</code></td></tr>
+<tr><td>Defining <code>OnControlValueChange</code> without writing values</td><td>Pass through everything you don't intercept</td></tr>
+<tr><td>Per-frame random rolls</td><td>Scale probabilities by <code>dt</code></td></tr>
+<tr><td>Writing a control the player is also moving</td><td>Virtual control pattern</td></tr>
+<tr><td>Two scripts (engine + sim) writing the same control</td><td>One owner per control</td></tr>
+<tr><td>Control name typos</td><td>Constants at the top of the script (the toolkit's Lua skeleton generates them from Blender tags)</td></tr>
+<tr><td>AI trains running player effects</td><td>Gate with <code>GetIsPlayer</code></td></tr>
+<tr><td>Newer Lua syntax (<code>#t</code>, <code>a % b</code>)</td><td>Loops with counters, <code>math.mod</code> or arithmetic</td></tr>
+</tbody></table>
+
+</body></html>

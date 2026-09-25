@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 4 — Blueprint Editor 2</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 4</div>
+    <h1>Blueprint Editor 2: turning geometry into a vehicle</h1>
+    <div class="sub">Build the bogie, simulation and vehicle blueprints in the right order, understand every field that matters, and avoid the
+      unit and default-value traps the sample vehicles contain.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>The blueprints you need and the order to build them</li>
+    <li>How BPE2 stores values (and why unit labels lie)</li>
+    <li>Bogie blueprints</li>
+    <li>The engine simulation blueprint: traction, brakes, air, curves</li>
+    <li>The engine blueprint: render, rail vehicle, children</li>
+    <li>Controls and the cab</li>
+    <li>Wagons and tenders</li>
+    <li>Exporting and previewing</li>
+    <li>Field reference: sample values side by side</li>
+  </ol></div>
+  <div class="foot">All field names and sample values are read from the Kuju sample blueprints supplied with this project unless marked
+  <span class="pill u">check</span>.</div>
+</section>
+
+<h1>1 · The blueprints you need and the order to build them</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker></defs>
+  <g>
+    <rect x="10" y="30" width="150" height="90" rx="6" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+    <text x="20" y="50" font-weight="bold">① Bogie blueprints</text><text x="20" y="68">one per bogie type</text><text x="20" y="84">needs: node names</text><text x="20" y="100">from the IGS</text>
+    <rect x="190" y="30" width="170" height="90" rx="6" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+    <text x="200" y="50" font-weight="bold">② Engine simulation</text><text x="200" y="68">subsystem, brakes, air,</text><text x="200" y="84">curves (.csv), sim script</text><text x="200" y="100">engines only</text>
+    <rect x="390" y="30" width="170" height="90" rx="6" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="2.2"/>
+    <text x="400" y="50" font-weight="bold">③ Engine / wagon bp</text><text x="400" y="68">geometry + anim sets,</text><text x="400" y="84">bogies, couplers, controls,</text><text x="400" y="100">cab, script, children</text>
+    <rect x="590" y="30" width="120" height="90" rx="6" fill="#16324f"/>
+    <text x="600" y="50" font-weight="bold" fill="#fff">④ Export</text><text x="600" y="68" fill="#cfe3f5">compiles the bp</text><text x="600" y="84" fill="#cfe3f5">and everything it</text><text x="600" y="100" fill="#cfe3f5">references</text>
+  </g>
+  <g stroke="#1f6fb2" stroke-width="2" marker-end="url(#m4)"><line x1="160" y1="75" x2="188" y2="75"/><line x1="360" y1="75" x2="388" y2="75"/><line x1="560" y1="75" x2="588" y2="75"/></g>
+  <rect x="10" y="140" width="700" height="80" rx="6" fill="#f4f6f9" stroke="#8a96a6" stroke-dasharray="4 3"/>
+  <text x="20" y="160" font-weight="bold">Optional, referenced from ③:</text>
+  <text x="20" y="178">⑤ Named texture set (number digits) · ⑥ numbering CSV · ⑦ cab and head-out camera blueprints · ⑧ light / particle / sound child blueprints</text>
+  <text x="20" y="196">⑨ Consist blueprint for testing (a loco + wagons, usable in scenarios) · ⑩ scenery blueprint for the cab (the sample's Sample_cab.xml, not needed by the loco)</text>
+  <text x="20" y="212" fill="#5b6676">Build leaf files first so every reference you set in ③ already exists; BPE2 path pickers then work and exports do not fail on missing files.</text>
+</svg>
+<figcaption><b>Figure 4.1 · Build order.</b> Leaves first, root last.</figcaption>
+</figure>
+<div class="box tip"><span class="t">Start from a copy, not a blank</span>
+<p>Copy the Kuju sample blueprints into your product folder and rename them. A blank blueprint has dozens of fields with no obvious
+defaults; a working sample already has valid brake, air and control structures. Then change what you understand and verify the rest.
+Keep the <code>Developer\Addon</code> provider/product in references only if you really use that folder; otherwise re-point every reference.</p></div>
+
+<h1>2 · How BPE2 stores values (and why unit labels lie)</h1>
+<p>A value typed in BPE2 is stored twice: the real <code>&lt;Value&gt;</code> the game reads, and a <code>ToolData</code> block recording what
+you typed (<code>mTypedIn</code>) and the unit label shown (<code>mUnits</code>). Some files have no ToolData at all (the sample engine and Bogie 01)
+and are equally valid. <span class="pill v">verified</span></p>
+<pre>&lt;Attribute name="MaxForce"&gt;&lt;sFloat32&gt;&lt;Element&gt;
+  &lt;ToolData&gt; … mUnits = <span class="s">"Lb/f"</span>  mTypedIn = <span class="s">"35.296001434326172"</span> … &lt;/ToolData&gt;
+  &lt;Value&gt;<span class="k">35.296001</span>&lt;/Value&gt;          <span class="c">&lt;- the number the game uses</span>
+&lt;/Element&gt;&lt;/sFloat32&gt;&lt;/Attribute&gt;</pre>
+<table>
+<thead><tr><th style="width:46mm">Label seen in samples</th><th>Observation</th><th style="width:38mm">Advice</th></tr></thead>
+<tbody>
+<tr><td>7F <code>MaxForce</code> “Lb/f” = 35.296</td><td>The real SDJR 7F tractive effort is 35,296&nbsp;lbf, so the value is in thousands of lbf despite the label.</td><td>Compare with a known-good loco</td></tr>
+<tr><td>Electric <code>MaxPower</code>/<code>MaxForce</code> no label = 6600 / 300</td><td>Throttle curve peaks at exactly 300, consistent with kN.</td><td>Keep curve peak = MaxForce</td></tr>
+<tr><td>Handbrake <code>MaxForce</code> “Lb/f” = 10000 / 15000</td><td>The handoff doc treats this as newtons; the label says lbf.</td><td>Tune in game; watch for locked wheels</td></tr>
+<tr><td>Compressor <code>PowerRating</code> “PSI_PER_SECOND” = 3</td><td>Label is obviously wrong for a power rating.</td><td>Ignore the label</td></tr>
+<tr><td>Air <code>ReservoirVolume</code> “PSI” = 10</td><td>Label is obviously wrong for a volume.</td><td>Ignore the label</td></tr>
+</tbody></table>
+<p>Boolean fields use <code>eTrue</code>/<code>eFalse</code>; enums are strings (<code>eVacuumSinglePipe</code>, <code>eDoubleCab</code>). Lists are wrapped in
+<code>__Indexed__…</code> elements; an empty list is <code>&lt;Element&gt;&lt;Value/&gt;&lt;/Element&gt;</code>.</p>
+
+<h1>3 · Bogie blueprints</h1>
+<table>
+<thead><tr><th style="width:44mm">Field</th><th style="width:34mm">Sample (Bogie 01)</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>WheelRadius</code></td><td>0.55</td><td>Metres. Must equal the modelled wheel radius (mesh: 0.525 ✘).</td></tr>
+<tr><td><code>WheelGauge</code></td><td>1.435</td><td>Metres; standard gauge.</td></tr>
+<tr><td><code>Geometry</code></td><td><code>bo01</code></td><td>Node name of the bogie frame in the vehicle IGS.</td></tr>
+<tr><td><code>Animation</code></td><td>(empty)</td><td>Optional animation on the bogie.</td></tr>
+<tr><td><code>Powered</code></td><td>eTrue</td><td>Whether this bogie's axles deliver traction. Bogie 02 omits it (engine default). Set it explicitly.</td></tr>
+<tr><td><code>SuspensionStiffness</code> / <code>Damping</code></td><td>8E+09 / 6E+07</td><td>Very stiff = rigid. Bogie 02 omits both. Set them explicitly.</td></tr>
+<tr><td><code>Axle[]</code>: Radius, HorizontalOffset, NodeId, AnimationId</td><td>0.55, ±2.2 / 0, <code>bo01wh01..03</code></td><td>One entry per wheelset; offset along track from the bogie pivot.</td></tr>
+<tr><td><code>PivotOffset</code></td><td>0 / 0</td><td>Extra horizontal/vertical pivot shift.</td></tr>
+</tbody></table>
+<div class="box"><span class="t">Let Blender write these</span><p>The toolkit's <b>Measure + write bogie XML</b> generates a bogie blueprint per <code>boNN</code> object with radius,
+offsets and node names measured from the mesh, in the same structure as Kuju's Bogie 01. Point the engine blueprint at the generated files.</p></div>
+
+<h1>4 · The engine simulation blueprint</h1>
+<h3>4.1 Common subsystem fields</h3>
+<table>
+<thead><tr><th style="width:44mm">Field</th><th style="width:36mm">Electric sample</th><th style="width:30mm">Steam 7F</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>MaxPower</code></td><td>6600</td><td>1328 (hp label)</td><td>Hard cap on power.</td></tr>
+<tr><td><code>MaxForce</code></td><td>300</td><td>35.296</td><td>Hard cap on tractive effort; ≥ curve peaks.</td></tr>
+<tr><td><code>MaxContinuousForce</code></td><td>250</td><td>–</td><td>≤ MaxForce.</td></tr>
+<tr><td><code>MaxSpeed</code></td><td>145 mph</td><td>60 mph</td><td>≥ the vehicle's MaxPermissibleSpeed.</td></tr>
+<tr><td><code>StartupTime</code> / <code>ShutdownTime</code></td><td>5 / 2 s</td><td>10 / 15 s</td><td>Time from Startup control to ready.</td></tr>
+<tr><td><code>Has3rdRailPowerSupply</code></td><td>eFalse</td><td>eFalse</td><td>Third-rail pickup.</td></tr>
+</tbody></table>
+<h3>4.2 Electric-specific fields (sample)</h3>
+<p><code>HasPantograph</code> eTrue · <code>TractiveForceVSpeed</code> and <code>TractiveEffortVThrottle</code> CSVs · <code>HasThyristorControl</code> eTrue ·
+<code>OverloadCurrent</code> 650&nbsp;A · <code>MaxCurrent</code> 1500&nbsp;A · <code>AntiSlipBrakeCylinderPressure</code> 20&nbsp;psi ·
+<code>CylinderPressureForBrakeToCutPower</code> 30&nbsp;psi · <code>QuickPowerOffAtZeroThrottle</code> eFalse · <code>SlowSpeedFitted…</code> ·
+<code>HasVentilator</code> eFalse · <code>DynamicBrakesSystem</code> (delay 2&nbsp;s, 3–100&nbsp;mph, max force 150, resistor 1000&nbsp;A, <code>BrakeEffortVsSpeed</code> CSV). <span class="pill v">verified</span></p>
+<h3>4.3 Steam-specific blocks (7F sample)</h3>
+<p><b>Firebox</b> (hand-fired, 800–1700&nbsp;°C, 1651&nbsp;kg max coal, grate limit 3080&nbsp;lb/h) · <b>Boiler</b> (200&nbsp;psi, 210&nbsp;ft³, 3900&nbsp;kg water,
+superheater 1.22, two safety valves 187/190&nbsp;psi) · <b>Cylinders</b> (2 × 21″×28″, manual cocks) · <b>Regulator</b> (twin-port) · <b>Injectors</b> (live and
+exhaust) · <b>Blower</b> · <b>CompressorEjector</b> (small and large ejectors) · <b>SteamHeating</b> · curves <code>TractiveEffortVsCutoff</code> (0–1 multiplier)
+and <code>TractiveEffortLinearVsSpeed</code> · <code>TenderRequired</code> eTrue. <span class="pill v">verified</span></p>
+
+<h3>4.4 Brakes</h3>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="10" width="700" height="180" rx="7" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+  <text x="20" y="30" font-weight="bold">SubSystem</text>
+  <rect x="24" y="44" width="200" height="130" rx="5" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="34" y="62" font-weight="bold">LocoBrakeAssembly</text><text x="34" y="80">engine brake, loco only</text>
+  <text x="34" y="100" fill="#5b6676">Both samples: empty list</text><text x="34" y="116" fill="#5b6676" font-family="DejaVu Sans Mono, monospace" font-size="8.5">&lt;Element&gt;&lt;Value/&gt;&lt;/Element&gt;</text>
+  <text x="34" y="138">control: EngineBrakeControl</text><text x="34" y="156" fill="#5b6676">(not present in samples)</text>
+  <rect x="240" y="44" width="300" height="130" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="250" y="62" font-weight="bold">TrainBrakeAssembly → BrakeType</text>
+  <text x="250" y="80">Air: cTrainAirBrakeDataBlueprint (electric)</text>
+  <text x="250" y="96">Vacuum: cTrainVacuumBrakeDataBlueprint (7F)</text>
+  <text x="250" y="116">EquipmentType · MaxForcePercentOfVehicleWeight</text>
+  <text x="250" y="132">Control[] → CabControlName = TrainBrakeControl</text>
+  <text x="250" y="148">Handbrake · Distributor · EmergencyBraking</text>
+  <text x="250" y="164">rates, cylinder and system pressures</text>
+  <rect x="556" y="44" width="140" height="130" rx="5" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="566" y="62" font-weight="bold">AirSystem</text><text x="566" y="80">compressor(s)</text><text x="566" y="96">cut-out / restart</text><text x="566" y="112">main reservoir</text><text x="566" y="132" font-weight="bold">DynamicBrakes</text><text x="566" y="148">(electric/diesel)</text>
+</svg>
+<figcaption><b>Figure 4.2 · Brake structure inside the subsystem.</b> The only link to the cab is <code>CabControlName</code>, which must equal a
+<code>ControlName</code> in the vehicle blueprint.</figcaption>
+</figure>
+<div class="box warn"><span class="t">The LocoBrakeAssembly question</span>
+<p>The project's handoff document states that an empty <code>&lt;LocoBrakeAssembly /&gt;</code> crashes newer TSC builds. Both Kuju samples ship
+with an <em>empty indexed list</em> (<code>&lt;Element&gt;&lt;Value/&gt;&lt;/Element&gt;</code> inside the attribute), which is a different XML shape. Safe
+practice: never hand-write a self-closing <code>LocoBrakeAssembly</code>; if your build is unstable or you want an independent brake, populate a
+loco-only brake that mirrors the train brake and add an <code>EngineBrakeControl</code>. <span class="pill u">check</span> the crash claim on your build.</p></div>
+<table>
+<thead><tr><th style="width:52mm">Train brake field</th><th style="width:34mm">Electric (air)</th><th style="width:34mm">7F (vacuum)</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>EquipmentType</code></td><td>eAirTwinPipe</td><td>eVacuumSinglePipe</td><td>Must match the wagons you haul.</td></tr>
+<tr><td><code>MaxForcePercentOfVehicleWeight</code></td><td>65</td><td>60</td><td>Brake force as % of weight.</td></tr>
+<tr><td><code>MaxApplicationRate</code> / <code>MaxReleaseRate</code></td><td>10 / 10 psi/s</td><td>5 / 1 inHg/s</td><td>How fast brakes bite / release.</td></tr>
+<tr><td><code>MaxCylinderPressure</code></td><td>63 psi</td><td>21 inHg</td><td>Peak cylinder pressure.</td></tr>
+<tr><td><code>PressureForMaxForce</code></td><td>63</td><td><b>0</b></td><td>Pressure at which full force is reached. The 7F's 0 looks suspicious; keep it equal to max cylinder pressure unless you know otherwise.</td></tr>
+<tr><td><code>MaxSystemPressure</code></td><td>72.5 psi</td><td>21 inHg</td><td>Brake-pipe working pressure.</td></tr>
+<tr><td><code>GraduatedRelease</code>, <code>ProportionalBrake</code></td><td>eTrue, eTrue</td><td>–, eTrue</td><td>Partial release allowed; force ∝ pressure.</td></tr>
+<tr><td>Control: <code>EmergencyApplicationRate</code></td><td>55</td><td>55</td><td>Emergency application speed.</td></tr>
+<tr><td>Control: <code>FullServicePressureDrop</code></td><td>21.5 psi</td><td>15</td><td>Pipe drop for full service.</td></tr>
+<tr><td><code>Handbrake.MaxForce</code></td><td>15000</td><td>10000</td><td>See unit note in §2.</td></tr>
+</tbody></table>
+<p><b>Air system (electric):</b> cut-out 145&nbsp;psi, restart 123&nbsp;psi, main reservoir max 145&nbsp;psi, one electric compressor. A <code>CutOutPressure</code> of 0 or an
+empty compressor list means the brakes never charge; the 1890s trolley has both.</p>
+
+<h3>4.5 Curves (.csv)</h3>
+<p>Plain two-column files, no header, <code>x,y</code> per line, linearly interpolated <span class="pill v">verified</span>:</p>
+<div class="two">
+<pre><span class="c">TractiveEffortVsThrottle.csv (electric)</span>
+0,0
+10,30
+20,60
+<span class="c">…</span>
+100,300</pre>
+<pre><span class="c">TractiveEffortVsCutoff.csv (7F steam)</span>
+0,0.18
+0.1,0.43
+0.2,0.53
+<span class="c">…</span>
+0.75,1</pre>
+</div>
+<ul><li>Throttle curve: X = throttle in %, Y = force; start at 0,0; peak = MaxForce.</li>
+<li>Speed curve: X = speed, Y = max force; last point at or beyond MaxSpeed.</li>
+<li>Steam cutoff curve: X = cutoff fraction, Y = multiplier 0–1.</li></ul>
+
+<h1>5 · The engine blueprint</h1>
+<h3>5.1 RenderComponent</h3>
+<ul>
+<li><code>GeometryID</code>: the exterior IGS path (relative to the product, e.g. <code>RailVehicles\Electric\EngineSample\Default\Engine\Sample_Engine t3.igs</code>).</li>
+<li><code>CollisionGeometryID</code>: a simple hull IGS (the sample uses a separate file).</li>
+<li><code>PrimaryNamedTextureSet</code>/<code>Secondary…</code>: the digits texture set used by <code>primarydigits</code>.</li>
+<li><code>AnimSet</code>: one entry per exterior .ia: <code>AnimationID</code> (your name), <code>AnimationName</code> (path), <code>AnimateInEditor</code>.</li>
+<li><code>ShadowType</code>, <code>CastsShadows</code>, <code>DetailLevelGenerationRange</code>: leave as the sample unless you know why.</li>
+</ul>
+<h3>5.2 RailVehicleComponent</h3>
+<table>
+<thead><tr><th style="width:52mm">Field</th><th style="width:28mm">Electric</th><th style="width:28mm">Steam 7F</th><th>Guidance</th></tr></thead>
+<tbody>
+<tr><td><code>Mass</code> (t)</td><td>84</td><td>68</td><td>Real service mass; it sets adhesion and brake force.</td></tr>
+<tr><td><code>EaseOfDerailment</code></td><td>0.4375</td><td>0.4375</td><td>Lower = harder to derail.</td></tr>
+<tr><td><code>FrontPivotX</code>/<code>BackPivotX</code></td><td>±9.515</td><td>6.6 / −4.185</td><td>Body pivots, see Part&nbsp;1.</td></tr>
+<tr><td><code>Collision…</code></td><td>18 × 2.978 × 2.75</td><td>10.8 × 2.5 × 3.0</td><td>Generate from the mesh (toolkit).</td></tr>
+<tr><td><code>DragCoefficient</code></td><td>1.45</td><td>2.04</td><td>Air resistance.</td></tr>
+<tr><td><code>RollingFrictionCoefficient</code></td><td>0.0006</td><td>0.00065</td><td>Rolling resistance.</td></tr>
+<tr><td><code>Dry/Wet/SnowFriction</code></td><td>0.9 / 0.45 / 0.275</td><td>1.0 / 0.5 / –</td><td>Adhesion by weather.</td></tr>
+<tr><td><code>SandFrictionMultiplier</code></td><td>2</td><td>2</td><td>Effect of sanding.</td></tr>
+<tr><td><code>Bogey[]</code></td><td>+6.25, −5.583</td><td>+5.151, 0</td><td>Must match the mesh (toolkit patch).</td></tr>
+<tr><td><code>Front/RearCouplingBlueprintID</code></td><td><b>empty</b></td><td>screw / bar coupling</td><td>Set one; the electric leaves both empty.</td></tr>
+<tr><td>Coupling pivot / receiving matrices</td><td>±9.03 / ±9.14 at 1.025</td><td>–</td><td>From empties in Blender (toolkit).</td></tr>
+<tr><td><code>EngineType</code></td><td>Electric</td><td>Steam</td><td>HUD and default key bindings.</td></tr>
+<tr><td><code>MaxPermissibleSpeed</code></td><td><b>0</b></td><td>–</td><td>Set to the real limit; AI drives to it.</td></tr>
+<tr><td><code>ValidStandaloneLoco</code></td><td>eTrue</td><td>–</td><td>Allows use as a lone loco.</td></tr>
+<tr><td><code>NumberingList</code></td><td>Sample_numbers.csv</td><td>Example_Steam_numbers.csv</td><td>Running numbers for the digits.</td></tr>
+</tbody></table>
+<h3>5.3 Children (ContainerComponent)</h3>
+<p>Child entities attach other blueprints at a position: head/tail light sources, particle emitters (the 7F's <code>Main Smoke Stack</code> →
+<code>Particles\Example_Smoke.xml</code>), sound emitters. The <b>ChildName</b> is how Lua reaches it (<code>Call("Main Smoke Stack:SetEmitterRate", r)</code>).
+The sample electric has no children. <span class="pill v">verified</span></p>
+
+<h1>6 · Controls and the cab</h1>
+<figure>
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="10" width="250" height="190" rx="7" fill="#16324f"/>
+  <text x="22" y="32" fill="#fff" font-weight="bold" font-size="11">cControlValue</text>
+  <g font-family="DejaVu Sans Mono, monospace" fill="#cfe3f5" font-size="9">
+  <text x="22" y="54">ControlName   "PantographControl"</text><text x="22" y="70">DefaultValue  1</text><text x="22" y="86">MinimumValue  0</text><text x="22" y="102">MaximumValue  1</text>
+  <text x="22" y="118">BriefDescription …</text><text x="22" y="134">ApplyToConsist eFalse</text><text x="22" y="150">HUDControlID  0</text><text x="22" y="176" fill="#f5d08c">InterfaceElements [ … ]</text></g>
+  <g>
+  <rect x="300" y="10" width="410" height="42" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="310" y="27" font-weight="bold">cInteriorPushButton</text><text x="310" y="43">pick “pantograph” · anim sample_pantograph.ia · Expert</text>
+  <rect x="300" y="60" width="410" height="42" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="310" y="77" font-weight="bold">cInteriorLever</text><text x="310" y="93">“PantographDisplay”: an animated indicator (no pick node)</text>
+  <rect x="300" y="110" width="410" height="42" rx="5" fill="#fbeceb" stroke="#b3261e"/><text x="310" y="127" font-weight="bold">cInteriorVisibilityObject</text><text x="310" y="143">TransformName “hs_aus_lit” ✘ missing node · thresholds 0/0 · ThresholdType Target</text>
+  <rect x="300" y="160" width="410" height="40" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="310" y="177" font-weight="bold">(on FrontPantographControl) cExteriorAnimation</text><text x="310" y="192">AnimationID “frontPanto”, AnimStyle Toggle</text>
+  </g>
+  <g stroke="#f5d08c" stroke-width="1.5" fill="none"><path d="M200,172 C260,172 260,31 298,31"/><path d="M200,172 C262,172 262,81 298,81"/><path d="M200,172 C264,172 264,131 298,131"/></g>
+</svg>
+<figcaption><b>Figure 4.3 · One control value, several interface elements.</b> The sample's <code>PantographControl</code> has a clickable button,
+a display lever and a lamp; a lamp whose node is missing silently never shows. <span class="pill v">verified</span></figcaption>
+</figure>
+<table>
+<thead><tr><th style="width:52mm">Element type</th><th>Key fields</th><th style="width:42mm">Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>cInteriorLever</code></td><td>PickTransformName, AnimationName, MovementType, sensitivities</td><td>Throttle, needles (no pick)</td></tr>
+<tr><td><code>cInteriorNotchedLever</code></td><td>+ NumberOfNotches, RestInNotchedPosition</td><td>Reverser, headlight switch</td></tr>
+<tr><td><code>cInteriorIrregularNotchedLever</code></td><td>+ Notch[] (Identifier, Value), DisplayNotchName</td><td>Brake handles</td></tr>
+<tr><td><code>cInteriorPushButton</code></td><td>+ AutoRelease</td><td>Horn, start, pantograph</td></tr>
+<tr><td><code>cExteriorAnimation</code></td><td>AnimationID, AnimStyle (Toggle, BackAndForthContinuous…)</td><td>Pantograph, wipers, doors</td></tr>
+<tr><td><code>cInteriorGeometrySlaveOutput</code></td><td>AnimationName</td><td>Second cab animation from same control</td></tr>
+<tr><td><code>cInteriorVisibilityObject</code></td><td>TransformName, Lower/UpperVisibilityThreshold, ThresholdType</td><td>Lamps, indicators, mesh swaps</td></tr>
+</tbody></table>
+<p><b>MovementType</b> (MoveUpDown, MoveLeftRight, MoveRightLeft, MoveDownUp, PushButton) sets how the mouse drags the control.
+<b>DifficultyType</b> (StopGo, Intermediate, Expert) chooses which elements are active per difficulty.
+The sample brake handle's notches are Release 0, GraduatedSelfLapLimitedHolding 0.3, Suppression 0.85, ContinuousService 0.9, Emergency 0.95. <span class="pill v">verified</span></p>
+
+<h3>Control names found in the samples</h3>
+<table>
+<thead><tr><th style="width:26mm">Group</th><th>Names</th></tr></thead>
+<tbody>
+<tr><td>Driving</td><td><code>Regulator</code>, <code>Reverser</code>, <code>SimpleThrottle</code>, <code>SimpleChangeDirection</code>, <code>TrainBrakeControl</code>, <code>EmergencyBrake</code>, <code>HandBrake</code>, <code>Startup</code>, <code>EngineStart</code></td></tr>
+<tr><td>Electric</td><td><code>PantographControl</code>, <code>FrontPantographControl</code>, <code>RearPantographControl</code></td></tr>
+<tr><td>Steam</td><td><code>FireboxDoor</code>, <code>Stoking</code>, <code>Blower</code>, <code>Damper</code>, <code>CylinderCock</code>, <code>LiveInjectorSteamOnOff</code>, <code>LiveInjectorWater</code>, <code>ExhaustInjectorSteamOnOff</code>, <code>ExhaustInjectorWater</code>, <code>SmallCompressorOnOff</code>, <code>WaterScoopRaiseLower</code>, <code>SafetyValve1/2</code></td></tr>
+<tr><td>Ancillary</td><td><code>Horn</code>, <code>Sander</code>, <code>Headlights</code>, <code>Wipers</code>, <code>DoorsOpenClose</code></td></tr>
+<tr><td>Gauges (outputs)</td><td><code>SpeedometerMPH</code>, <code>BoilerPressureGaugePSI</code>, <code>SteamChestPressureGaugePSI</code>, <code>VacuumBrakePipePressureINCHES</code>, <code>SteamHeatingPressureGaugePSI</code>, <code>WaterGauge</code></td></tr>
+</tbody></table>
+<p class="small">The simulation recognises its inputs and outputs by these exact names <span class="pill u">check</span> which ones your subsystem reads before
+renaming anything. Your own custom names (e.g. <code>TrolleyPoleFront</code>) are ignored by the simulation and are free for scripts and animations.</p>
+
+<h3>The cab (InteriorInterface)</h3>
+<p><code>InteriorGeometryID</code> = cab IGS, <code>NumberOfCabs</code> = eSingleCab/eDoubleCab, <code>InteriorCamera</code> = cab camera blueprint,
+<code>CabOcclusion</code> optional. The head-out camera and <code>DriverPosition</code> matrix live on the rail vehicle component.</p>
+
+<h1>7 · Wagons and tenders</h1>
+<p>A wagon is built exactly like an engine minus the powertrain. <span class="pill u">check</span> exact class and field names against a stock wagon in your
+BPE2 (New ▸ Wagon blueprint), since no wagon sample was supplied:</p>
+<ul>
+<li>Same Blender rules: <code>bo01</code>/<code>bo02</code>, wheels, origin on the rail, LODs, shadows, numbers.</li>
+<li>Rail vehicle data: mass (empty and loaded if the wagon carries cargo), friction, bogies, couplings, collision.</li>
+<li>Brake equipment must match the loco (air twin pipe vs vacuum), or the train brake does not propagate.</li>
+<li>No engine simulation, no cab. Controls only if a script or animation needs them (doors, tail lamps).</li>
+<li>Scripts are allowed: doors, loads and lamps are typically driven by <code>OnConsistMessage</code> from the loco (Part&nbsp;5).</li>
+<li>Tenders are their own type; a steam engine with <code>TenderRequired = eTrue</code> needs one coupled to run.</li>
+</ul>
+
+<h1>8 · Exporting and previewing</h1>
+<ol class="steps">
+<li>Save every blueprint (BPE2 validates as you save and highlights broken references).</li>
+<li>Right-click the vehicle blueprint (or its folder) ▸ <b>Export</b>. BPE2 compiles the blueprint and everything it references into
+<code>Assets\Provider\Product\…</code>: geometry, textures, animations, curves and Lua (<code>.out</code>). Read the output pane for errors.</li>
+<li>Use <b>Preview</b> to open the compiled vehicle in the asset preview, check textures, LODs and “Animate in editor” animations.
+If an animation looks stale, close the preview and clear its cache (BRIAGE §9.1.1).</li>
+<li>Test in game (Part&nbsp;6).</li>
+</ol>
+<div class="box warn"><span class="t">Never export into a route that is open</span><p>Exporting to an enabled provider/product while the TSC route editor has it loaded, then
+reloading the product, can corrupt the route on save (BRIAGE §9.1.3). Close the game before exporting.</p></div>
+
+<h1>9 · Field reference: problems in the samples and the 1890s trolley</h1>
+<table>
+<thead><tr><th style="width:48mm">Symptom in game</th><th style="width:52mm">Field(s)</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Spawns with brakes on</td><td><code>TrainBrakeControl.DefaultValue</code> 0.7 / 1.0 / 0.25</td><td>0 for driving tests</td></tr>
+<tr><td>AI tries to go too fast / no limit</td><td><code>MaxPermissibleSpeed</code> 0 or 100 on a 35&nbsp;km/h tram</td><td>Real limit</td></tr>
+<tr><td>Almost no traction</td><td><code>MaxForce</code> 10 vs curve peak 220 (trolley)</td><td>Match curve and cap</td></tr>
+<tr><td>Brakes never charge</td><td>Empty compressor, <code>CutOutPressure</code> 0 (trolley)</td><td>Add compressor, set pressures</td></tr>
+<tr><td>Brake handle does nothing</td><td><code>CabControlName</code> ≠ ControlName</td><td>Same string</td></tr>
+<tr><td>Wheels lock on handbrake</td><td><code>Handbrake.MaxForce</code> 100000 (trolley)</td><td>Tune down</td></tr>
+<tr><td>Bogie turns in the wrong place</td><td><code>BogeyPivotX</code> ≠ mesh</td><td>Toolkit patch</td></tr>
+<tr><td>Couplers don't connect / float</td><td>Empty coupling blueprint IDs; matrices off the ends</td><td>Set coupling blueprints; toolkit patch</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">Automate the lint</span><p><code>python tools/tsc_crosscheck.py --engine … --sim … --csv …</code> flags the spawn-braked default, MaxForce vs curve,
+empty compressor, zero cut-out pressure, missing <code>CabControlName</code> targets and zero <code>MaxPermissibleSpeed</code> (Part&nbsp;7).</p></div>
+
+</body></html>

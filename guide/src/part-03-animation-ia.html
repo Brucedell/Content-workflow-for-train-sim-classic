@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 3 — Animations and IA Export</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 3</div>
+    <h1>Animations and IA export</h1>
+    <div class="sub">Pantographs, wipers, doors, cab levers and needles: how to key them in Blender so that one <code>.ia</code> file per
+      animation drops straight into the blueprints and behaves the same in game as in the viewport.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>The three ways TSC moves a node</li>
+    <li>What an .ia file contains</li>
+    <li>The golden rules</li>
+    <li>Worked example: pantograph (exterior, toggled)</li>
+    <li>Worked example: cab lever and needle (scrubbed by value)</li>
+    <li>Worked example: wipers and doors</li>
+    <li>Project example: a trolley pole with route-specific wire heights</li>
+    <li>Exporting .ia files with BRIAGE, step by step</li>
+    <li>Troubleshooting</li>
+  </ol></div>
+  <div class="foot">BRIAGE references are to the v2.5.786 manual. Sample data: the electric loco's Blender scene reads
+  (12 cab actions and 6 pantograph actions, 35 frames each at 24&nbsp;fps) and its blueprint.</div>
+</section>
+
+<h1>1 · The three ways TSC moves a node</h1>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <g font-weight="bold" font-size="10.5"><text x="90" y="18" text-anchor="middle">Blender</text><text x="270" y="18" text-anchor="middle">File</text><text x="460" y="18" text-anchor="middle">Linked in blueprint by</text><text x="640" y="18" text-anchor="middle">Driven by</text></g>
+  <!-- row A -->
+  <rect x="10" y="30" width="160" height="64" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="20" y="48" font-weight="bold">Cab lever / needle</text><text x="20" y="64">action on 1_0000_throttle</text><text x="20" y="80">frames 0 → 34</text>
+  <rect x="200" y="42" width="140" height="40" rx="5" fill="#fff" stroke="#16324f"/><text x="270" y="66" text-anchor="middle" font-family="DejaVu Sans Mono, monospace">sample_throttle.ia</text>
+  <rect x="370" y="30" width="180" height="64" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="380" y="48" font-weight="bold">Interface element</text><text x="380" y="64">AnimationName = path</text><text x="380" y="80">PickTransformName = node</text>
+  <rect x="580" y="30" width="130" height="64" rx="5" fill="#16324f"/><text x="590" y="50" fill="#fff" font-weight="bold">Control value</text><text x="590" y="66" fill="#cfe3f5">min → first frame</text><text x="590" y="82" fill="#cfe3f5">max → last frame</text>
+  <!-- row B -->
+  <rect x="10" y="118" width="160" height="64" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="20" y="136" font-weight="bold">Pantograph, wiper, door</text><text x="20" y="152">actions on the chain</text><text x="20" y="168">frames 0 → 34</text>
+  <rect x="200" y="130" width="140" height="40" rx="5" fill="#fff" stroke="#16324f"/><text x="270" y="154" text-anchor="middle" font-family="DejaVu Sans Mono, monospace">sample_panto01.IA</text>
+  <rect x="370" y="118" width="180" height="64" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="380" y="136" font-weight="bold">RenderComponent AnimSet</text><text x="380" y="152">ID “frontPanto” → file</text><text x="380" y="168">+ exterior element on a control</text>
+  <rect x="580" y="118" width="130" height="64" rx="5" fill="#16324f"/><text x="590" y="138" fill="#fff" font-weight="bold">AnimStyle</text><text x="590" y="154" fill="#cfe3f5">Toggle / BackAndForth…</text><text x="590" y="170" fill="#cfe3f5">or Lua AddTime</text>
+  <!-- row C -->
+  <rect x="10" y="206" width="160" height="64" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="20" y="224" font-weight="bold">Wheels, bogies</text><text x="20" y="240">no keyframes needed</text><text x="20" y="256">(node + origin only)</text>
+  <rect x="200" y="218" width="140" height="40" rx="5" fill="#f4f6f9" stroke="#8a96a6" stroke-dasharray="4 3"/><text x="270" y="242" text-anchor="middle" fill="#5b6676">(no .ia)</text>
+  <rect x="370" y="206" width="180" height="64" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="380" y="224" font-weight="bold">Bogie blueprint</text><text x="380" y="240">Geometry, Axle NodeId,</text><text x="380" y="256">Radius, HorizontalOffset</text>
+  <rect x="580" y="206" width="130" height="64" rx="5" fill="#16324f"/><text x="590" y="226" fill="#fff" font-weight="bold">Physics</text><text x="590" y="242" fill="#cfe3f5">speed ÷ radius → spin</text><text x="590" y="258" fill="#cfe3f5">track curve → bogie yaw</text>
+  <g stroke="#5b6676" stroke-width="1.4" marker-end="url(#m3)"><line x1="170" y1="62" x2="198" y2="62"/><line x1="340" y1="62" x2="368" y2="62"/><line x1="550" y1="62" x2="578" y2="62"/>
+  <line x1="170" y1="150" x2="198" y2="150"/><line x1="340" y1="150" x2="368" y2="150"/><line x1="550" y1="150" x2="578" y2="150"/>
+  <line x1="340" y1="238" x2="368" y2="238"/><line x1="550" y1="238" x2="578" y2="238"/></g>
+  <text x="360" y="292" text-anchor="middle" fill="#5b6676">Every row ends at a name the blueprint stores. The .ia only says how nodes move; the blueprint says when.</text>
+</svg>
+<figcaption><b>Figure 3.1 · Three animation paths.</b> Row A is used by every cab control in the sample (11 object actions and one armature
+action). Row B is used by the two pantographs and the wipers (<code>frontPanto</code>/<code>rearPanto</code> with AnimStyle
+<code>Toggle</code>, <code>Wipers</code> with <code>BackAndForthContinuous</code>). Row C needs no keyframes at all. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>2 · What an .ia file contains</h1>
+<ul>
+<li>For each exported node: <b>position and rotation</b> per frame. <b>No scale</b> (BRIAGE §8.5.2), no materials, no geometry.</li>
+<li>A <b>sample rate</b> = Blender fps × Frame rate Multiplier, visible as <code>SampleRate</code> in the log (BRIAGE §5.2).</li>
+<li>Node names that must exist in the IGS the animation is played on. The .ia and .igs are matched <b>by node name</b>, so an .ia
+exported from a scene whose names differ from the IGS moves nothing.</li>
+<li>Motion relative to each node's parent when <b>Relative export</b> is on (default, BRIAGE §5.5), which is what you want for
+chains like pantograph arms and for buttons mounted on moving parts.</li>
+</ul>
+
+<h1>3 · The golden rules</h1>
+<div class="box rule"><span class="t">Seven rules that prevent almost every animation bug</span><ol>
+<li><b>Frame 0 is the rest pose</b> and must match the exported IGS. The IGS is exported at frame 0 (BRIAGE §8.4.1).</li>
+<li><b>One independent motion = one .ia file.</b> Everything in one file moves together. Different controls need different files.</li>
+<li><b>Each animated node must be a separate node</b> in the IGS: a keyword name or a custom keyword, otherwise it is merged away (Part&nbsp;2).</li>
+<li><b>Cab controls span min → max.</b> The first frame is the control's minimum and the last frame its maximum; the game scrubs linearly between them.</li>
+<li><b>Use LINEAR interpolation</b> for anything scrubbed by value (levers, needles), or the lever lags behind the value at the ends. BRIAGE also recommends linear to cure stutter (§9.6).</li>
+<li><b>Apply scale and rotation before keying</b> (BRIAGE §9.9). Never animate scale.</li>
+<li><b>What the viewport plays is what is exported.</b> Constraints, drivers, bones and child-of links are baked as evaluated (BRIAGE §8.5.1), so a disabled constraint is also disabled in the export.</li>
+</ol></div>
+
+<h3>Several animations in one .blend</h3>
+<p>BRIAGE offers two ways (BRIAGE §8.5.3), and the sample uses the first:</p>
+<div class="two">
+<div class="box"><span class="t">A · Same range, separate selection</span>
+<p>All actions run 0–34. For each export, select only the objects of that animation. The sample's 12 cab actions are all 0–34.
+The toolkit's “Prepare next IA job” does the selecting for you.</p></div>
+<div class="box"><span class="t">B · Separate frame ranges</span>
+<p>Wipers 0–100, doors 120–200, and so on. Set the scene range to the animation before each export. Enable
+<b>Trim Animation</b> (§5.4) to drop idle frames at either end.</p></div>
+</div>
+
+<h1>4 · Worked example: pantograph</h1>
+<div class="two">
+<div>
+<figure>
+<svg viewBox="0 0 330 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <line x1="10" y1="200" x2="320" y2="200" stroke="#16324f" stroke-width="3"/><text x="14" y="216" fill="#5b6676">roof</text>
+  <!-- lowered (frame 0) -->
+  <g stroke="#8a96a6" stroke-width="3" fill="none"><path d="M60,196 L170,184"/><path d="M170,184 L270,178"/></g>
+  <rect x="250" y="170" width="46" height="6" fill="#8a96a6"/>
+  <!-- raised (frame 34) -->
+  <g stroke="#1f6fb2" stroke-width="3.5" fill="none"><path d="M60,196 L150,120"/><path d="M150,120 L220,60"/></g>
+  <rect x="196" y="50" width="56" height="7" fill="#1f6fb2"/>
+  <line x1="10" y1="40" x2="320" y2="40" stroke="#a86400" stroke-dasharray="6 4"/><text x="14" y="34" fill="#a86400">contact wire</text>
+  <g fill="#fff" stroke="#16324f" stroke-width="1.5"><circle cx="60" cy="196" r="5"/><circle cx="150" cy="120" r="5"/><circle cx="220" cy="60" r="5"/></g>
+  <text x="70" y="192" font-weight="bold">part01</text><text x="160" y="118" font-weight="bold">part02</text><text x="230" y="70" font-weight="bold">part03</text>
+  <text x="200" y="196" fill="#8a96a6">frame 0: down</text><text x="258" y="46" fill="#1f6fb2" font-size="9">frame 34</text>
+</svg>
+<figcaption><b>Figure 3.2 · The sample's pantograph chain.</b> part02 is parented to part01 and part03 to part02 (verified in the
+geometry's transform dependencies), so each part only rotates about its own hinge.</figcaption>
+</figure>
+</div>
+<div>
+<ol class="steps">
+<li>Model the arms as separate objects, origins on the hinges, named <code>1_0128_panto01_part01..03</code> (<code>panto$$</code> is a keyword, so no custom keyword is needed).</li>
+<li>Parent part02 → part01 and part03 → part02.</li>
+<li>Key frame 0 down, frame 34 up (the sample: 35 frames at 24&nbsp;fps ≈ 1.46&nbsp;s). Use a rig or constraints if you like; the evaluated motion is baked.</li>
+<li>Select <b>part01</b> (children follow when <b>Selected hierarchy</b> is on, §5.6) and export <code>sample_panto01.ia</code>. Repeat for panto02.</li>
+<li>In BPE2: RenderComponent ▸ AnimSet ▸ add ID <code>frontPanto</code> → file; tick <b>Animate in editor</b>.</li>
+<li>In ControlValues: <code>FrontPantographControl</code> gets an <b>Exterior animation</b> element, AnimationID <code>frontPanto</code>, AnimStyle <code>Toggle</code>.</li>
+</ol>
+</div>
+</div>
+
+<h1>5 · Worked example: cab lever and needle</h1>
+<figure>
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <line x1="60" y1="60" x2="660" y2="60" stroke="#16324f" stroke-width="2"/>
+  <g font-family="DejaVu Sans Mono, monospace">
+  <line x1="60" y1="52" x2="60" y2="68" stroke="#16324f" stroke-width="2"/><text x="60" y="44" text-anchor="middle">frame 0</text>
+  <line x1="360" y1="52" x2="360" y2="68" stroke="#16324f" stroke-width="2"/><text x="360" y="44" text-anchor="middle">frame 17</text>
+  <line x1="660" y1="52" x2="660" y2="68" stroke="#16324f" stroke-width="2"/><text x="660" y="44" text-anchor="middle">frame 34</text>
+  <text x="60" y="88" text-anchor="middle" fill="#1f6fb2">Regulator 0.0</text><text x="360" y="88" text-anchor="middle" fill="#1f6fb2">0.5</text><text x="660" y="88" text-anchor="middle" fill="#1f6fb2">1.0</text>
+  </g>
+  <path d="M60,60 L660,60" stroke="#1f6fb2" stroke-width="4" opacity="0.25"/>
+  <text x="60" y="118" fill="#5b6676">Rotation keyed at frame 0 (lever back) and frame 34 (lever full forward), interpolation LINEAR.</text>
+  <text x="60" y="136" fill="#5b6676">A notched lever (e.g. TrainBrakeControl notches Release 0 … Emergency 0.95) lands at value × last frame.</text>
+  <text x="60" y="154" fill="#5b6676">A needle (SpeedometerMPH, range 0–500 in the sample) must sweep the dial so that the maximum value reads correctly at the last frame.</text>
+</svg>
+<figcaption><b>Figure 3.3 · Value-to-frame mapping for a scrubbed cab animation.</b> The frame count only sets the resolution; the
+fps is irrelevant because the game never “plays” this animation, it positions it.</figcaption>
+</figure>
+<ul>
+<li><b>Calibrate the dial against the control range.</b> The sample's <code>SpeedometerMPH</code> range is 0–500, so a dial drawn for
+0–150&nbsp;mph would read wrong: either change the range to the dial's full scale or key the needle to the 500 mark. <span class="pill v">verified</span></li>
+<li><b>Needles beyond 180°</b> stutter with too few samples: use Frame rate Multiplier 7 and an odd frame count (≈25) (BRIAGE §8.5.4).</li>
+<li><b>Bone-driven controls</b> (the sample's <code>sample_start.ia</code> armature with bones <code>2_0000_start</code>/<code>3_0000_start</code>) export
+as pose animation; make sure the matching nodes exist in the cab IGS. In the sample they don't, which is why the start button is dead.</li>
+</ul>
+
+<h1>6 · Worked example: wipers and doors</h1>
+<div class="two">
+<div><h3>Wipers</h3>
+<p>Key a full cycle: park → sweep → park. Tick <b>Remove last frame</b> (§5.3) so the loop does not double the park frame.
+Link as AnimSet <code>Wipers</code>, exterior element AnimStyle <code>BackAndForthContinuous</code>, driven by the <code>Wipers</code> control. The sample also
+plays a cab wiper animation (<code>CabView\sample_wipers.ia</code>) from the same control through an interior slave element. <span class="pill v">verified</span></p></div>
+<div><h3>Doors (wagons and coaches)</h3>
+<p>One .ia per side (<code>doors_left</code>, <code>doors_right</code>) so the script can open the platform side only. Name leaves with the
+<code>door$$</code> keyword. Doors are usually toggled by a control (<code>DoorsOpenClose</code> exists on the steam sample) or by Lua with
+<code>AddTime</code> (Part&nbsp;5).</p></div>
+</div>
+
+<h1>7 · Project example: trolley pole with route-specific wire heights</h1>
+<p>The Texas Electric trolley-pole revision spec defines the pole position as <b>animation frames 0–100</b>, with wire-height presets at
+frames 65, 72, 78 and 92, and a gravity fall of 50&nbsp;frames/s. Make the animation match the spec exactly so the Lua (Part&nbsp;5) can use
+spec numbers directly:</p>
+<ol class="steps">
+<li>Key the pole from roof saddle (frame 0) to maximum travel (frame 100). Frame numbers are then literally the spec's positions.</li>
+<li>Set Blender to a round rate for this file's timing maths. At 100&nbsp;fps, 1 frame = 0.01&nbsp;s of animation time, so
+“move to frame F” = animation time F/100 s. (Check <code>SampleRate</code> in the log.)</li>
+<li>Export two files (front and rear pole) with independent AnimSet IDs, e.g. <code>poleFront</code> and <code>poleRear</code>.</li>
+<li>The trailing/leading swing and the 3rd hidden radial bogie in the spec are separate nodes with their own animation or bogie entry; keep
+them out of the pole's .ia.</li>
+<li>For the stowed/locked mesh swap in the spec, model both meshes and let the blueprint's visibility elements (or <code>ActivateNode</code> from Lua)
+show one at a time. The static stowed mesh must be its own node.</li>
+</ol>
+<div class="box warn"><span class="t">Scrubbed exterior animation <span class="pill u">check</span></span>
+<p>Exterior animations are played with <code>Call("*:AddTime", id, seconds)</code> and <code>Call("*:Reset", id)</code> (documented in the TS2015
+reference; AddTime returns non-zero at the end). To hold the pole at an arbitrary frame, keep your own frame counter in Lua and add the
+difference each update. Many community scripts also use a <code>SetTime</code> call; it is not in the supplied reference, so test it in your
+build before relying on it.</p></div>
+
+<h1>8 · Exporting .ia files with BRIAGE, step by step</h1>
+<ol class="steps">
+<li>Export the IGS first, and <b>do not change object names or hierarchy</b> between IGS and IA exports.</li>
+<li>In the IA panel (below the IGS panel in Scene properties) choose Export selected, <b>Relative export</b> on, <b>Selected hierarchy</b> on.</li>
+<li>Select the animation's root objects. Include: objects without a parent that are animated; objects whose parent is an armature; parents of
+animated children (BRIAGE §8.5.5 / annex 10.5). Children of selected objects come along automatically.</li>
+<li>Set the frame range to the animation (0–34 in the sample), or rely on Trim Animation.</li>
+<li>Export to the matching folder: exterior animations next to the exterior IGS, cab animations in <code>CabView</code>.</li>
+<li>Repeat per animation. With the toolkit, tag each root object with a custom property <code>tsc_ia = "sample_throttle"</code> and press
+<b>Prepare next IA job</b>: it selects the object, sets the range, rewinds to frame 0 and copies the file name to the clipboard.</li>
+</ol>
+
+<h1>9 · Troubleshooting</h1>
+<table>
+<thead><tr><th style="width:52mm">Symptom</th><th>Cause and fix</th></tr></thead>
+<tbody>
+<tr><td>Nothing moves in the preview</td><td>AnimSet entry lacks “Animate in editor = True” (BRIAGE §9.5); or the node was merged (check the Groups list); or the .ia was exported from different names.</td></tr>
+<tr><td>Part jumps to a wrong position before animating</td><td>Rest pose on frame 0 differs from the pose at IGS export; apply rotation/scale before keying; for stubborn children use a Child&nbsp;Of constraint with Set Inverse and re-export the IGS (BRIAGE §9.9).</td></tr>
+<tr><td>Whole model slides during an animation</td><td>IA selection is inconsistent with the IGS structure (e.g. a child selected without its parent while Relative export is off) (BRIAGE §8.5.5).</td></tr>
+<tr><td>Stuttering</td><td>Linear interpolation; raise Frame rate Multiplier; for needles use 7× and an odd frame count (BRIAGE §9.6, §8.5.4).</td></tr>
+<tr><td>Preview still shows the old animation</td><td>Close the Asset Editor/preview, clear its cache, restart (BRIAGE §9.1.1).</td></tr>
+<tr><td>Lever moves but is offset from the value</td><td>Non-linear keys, or keys not at the first/last frame, or control min/max not matching the keyed extremes.</td></tr>
+<tr><td>Scale animation ignored</td><td>IA has no scale. Fake it with bones and skinning (BRIAGE §8.5.2) or swap meshes with visibility.</td></tr>
+</tbody></table>
+
+</body></html>

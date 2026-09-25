@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 1 — What a TSC Vehicle Actually Is</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 1</div>
+    <h1>What a TSC vehicle actually is</h1>
+    <div class="sub">The game never sees your Blender model. It sees a bundle of blueprints that point at geometry, animations,
+      curves and scripts, tied together by named nodes and named control values. Understand that bundle and every rule in the
+      later parts makes sense.</div>
+  </div>
+  <div class="toc">
+    <h3>In this part</h3>
+    <ol>
+      <li>A vehicle is a graph of files, not a model</li>
+      <li>The components inside a vehicle blueprint</li>
+      <li>How the game places a vehicle on the track (side view with real numbers)</li>
+      <li>Three coordinate systems and how they map</li>
+      <li>Control values: the bus everything talks through</li>
+      <li>The traction and braking chain</li>
+      <li>Engine vs wagon vs tender</li>
+      <li>What happens when a scenario loads</li>
+      <li>The glue: names</li>
+    </ol>
+  </div>
+  <div class="foot">Examples use the Kuju “Sample Electric Engine” (<code>RailVehicles\Electric\EngineSample</code>) and “Example Steam Engine”
+    (SDJR&nbsp;7F 2-8-0) blueprints supplied with this project.</div>
+</section>
+
+<h1>1 · A vehicle is a graph of files, not a model</h1>
+<p>When you place a locomotive in a scenario, TSC loads one <b>vehicle blueprint</b> (an engine, wagon or tender blueprint). That
+file contains almost no geometry. Instead it <b>references</b> other files by path, and those files reference more files. The
+figure below is the real graph of the Kuju sample electric locomotive, with its actual file names. <span class="pill v">verified</span></p>
+
+<figure>
+<svg viewBox="0 0 720 430" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <style>.bp{fill:#e8f1fa;stroke:#1f6fb2;stroke-width:1.4}.geo{fill:#fdf3e2;stroke:#a86400;stroke-width:1.2}.dat{fill:#e5f4f1;stroke:#177a6e;stroke-width:1.2}.scr{fill:#f3effa;stroke:#6b4fa0;stroke-width:1.2}.lbl{fill:#5b6676;font-size:8.5px;font-style:italic}.edge{stroke:#5b6676;stroke-width:1.2;fill:none}</style>
+  <!-- centre -->
+  <rect class="bp" x="250" y="178" width="200" height="74" rx="6" stroke-width="2.2"/>
+  <text x="350" y="198" text-anchor="middle" font-weight="bold" font-size="11">Sample_Engine.xml</text>
+  <text x="350" y="214" text-anchor="middle">cEngineBlueprint</text>
+  <text x="350" y="230" text-anchor="middle" fill="#5b6676">mass · bogies · couplings ·</text>
+  <text x="350" y="243" text-anchor="middle" fill="#5b6676">controls · cab · anim sets</text>
+
+  <!-- geometry (top) -->
+  <rect class="geo" x="20" y="20" width="170" height="40" rx="5"/><text x="105" y="37" text-anchor="middle" font-weight="bold">Sample_Engine t3.igs</text><text x="105" y="51" text-anchor="middle" fill="#5b6676">exterior geometry</text>
+  <rect class="geo" x="205" y="20" width="150" height="40" rx="5"/><text x="280" y="37" text-anchor="middle" font-weight="bold">Sample_Engine.IGS</text><text x="280" y="51" text-anchor="middle" fill="#5b6676">collision geometry</text>
+  <rect class="geo" x="370" y="20" width="150" height="40" rx="5"/><text x="445" y="37" text-anchor="middle" font-weight="bold">sample_panto01/02.IA</text><text x="445" y="51" text-anchor="middle" fill="#5b6676">+ sample_wipers.IA</text>
+  <rect class="dat" x="535" y="20" width="165" height="40" rx="5"/><text x="617" y="37" text-anchor="middle" font-weight="bold">sample_digits.xml</text><text x="617" y="51" text-anchor="middle" fill="#5b6676">named texture set (numbers)</text>
+  <path class="edge" d="M300,178 C250,120 130,100 105,62" marker-end="url(#a1)"/><text class="lbl" x="150" y="100">GeometryID</text>
+  <path class="edge" d="M320,178 C300,120 285,90 282,62" marker-end="url(#a1)"/><text class="lbl" x="292" y="118">CollisionGeometryID</text>
+  <path class="edge" d="M380,178 C400,120 435,90 442,62" marker-end="url(#a1)"/><text class="lbl" x="415" y="118">AnimSet IDs</text>
+  <path class="edge" d="M420,178 C500,120 590,100 612,62" marker-end="url(#a1)"/><text class="lbl" x="520" y="100">NamedTextureSet</text>
+
+  <!-- left: bogies & cab -->
+  <rect class="bp" x="20" y="150" width="170" height="40" rx="5"/><text x="105" y="167" text-anchor="middle" font-weight="bold">Sample Bogie 01.xml</text><text x="105" y="181" text-anchor="middle" fill="#5b6676">cBogeyBlueprint → node bo01</text>
+  <rect class="bp" x="20" y="200" width="170" height="40" rx="5"/><text x="105" y="217" text-anchor="middle" font-weight="bold">Sample Bogie 02.xml</text><text x="105" y="231" text-anchor="middle" fill="#5b6676">cBogeyBlueprint → node bo02</text>
+  <path class="edge" d="M250,205 L192,172" marker-end="url(#a1)"/><path class="edge" d="M250,222 L192,220" marker-end="url(#a1)"/><text class="lbl" x="200" y="198">Bogey[]</text>
+
+  <rect class="geo" x="20" y="290" width="170" height="40" rx="5"/><text x="105" y="307" text-anchor="middle" font-weight="bold">sample_cab.igs</text><text x="105" y="321" text-anchor="middle" fill="#5b6676">cab geometry (pick nodes)</text>
+  <rect class="geo" x="20" y="340" width="170" height="40" rx="5"/><text x="105" y="357" text-anchor="middle" font-weight="bold">CabView\sample_*.ia</text><text x="105" y="371" text-anchor="middle" fill="#5b6676">one per lever / switch</text>
+  <rect class="bp" x="20" y="390" width="170" height="32" rx="5"/><text x="105" y="410" text-anchor="middle">Cab / Headout camera .xml</text>
+  <path class="edge" d="M280,252 C240,290 220,305 192,308" marker-end="url(#a1)"/><text class="lbl" x="200" y="285">InteriorGeometryID</text>
+  <path class="edge" d="M290,252 C250,330 230,352 192,358" marker-end="url(#a1)"/><text class="lbl" x="205" y="345">AnimationName</text>
+  <path class="edge" d="M300,252 C270,370 240,400 192,405" marker-end="url(#a1)"/>
+
+  <!-- right: sim -->
+  <rect class="bp" x="510" y="160" width="190" height="50" rx="5" stroke-width="1.8"/><text x="605" y="180" text-anchor="middle" font-weight="bold">Electric Engine Simulation.xml</text><text x="605" y="196" text-anchor="middle" fill="#5b6676">cEngineSimBlueprint</text>
+  <path class="edge" d="M450,205 L508,190" marker-end="url(#a1)"/><text class="lbl" x="455" y="186">EngineSimFile</text>
+  <rect class="dat" x="510" y="228" width="190" height="62" rx="5"/>
+  <text x="520" y="245">TractiveEffortVsSpeed.csv</text><text x="520" y="260">TractiveEffortVsThrottle.csv</text><text x="520" y="275">DynamicBrakeEffortVsSpeed.csv</text>
+  <path class="edge" d="M605,210 L605,226" marker-end="url(#a1)"/>
+  <rect class="scr" x="510" y="300" width="190" height="34" rx="5"/><text x="605" y="321" text-anchor="middle">Electric Engine Simulation.lua</text>
+  <path class="edge" d="M700,185 C716,230 716,290 702,316" marker-end="url(#a1)"/>
+
+  <!-- bottom: script & numbers -->
+  <rect class="scr" x="270" y="300" width="160" height="34" rx="5"/><text x="350" y="321" text-anchor="middle">Sample_EngineScript.lua</text>
+  <path class="edge" d="M350,252 L350,298" marker-end="url(#a1)"/><text class="lbl" x="355" y="280">ScriptComponent</text>
+  <rect class="dat" x="270" y="350" width="160" height="34" rx="5"/><text x="350" y="371" text-anchor="middle">Sample_numbers.csv</text>
+  <path class="edge" d="M430,245 C480,300 470,350 432,366" marker-end="url(#a1)"/><text class="lbl" x="460" y="345">NumberingList</text>
+
+  <!-- legend -->
+  <g font-size="9"><rect class="bp" x="480" y="360" width="14" height="10"/><text x="500" y="369">blueprint (.xml, edited in BPE2)</text>
+  <rect class="geo" x="480" y="376" width="14" height="10"/><text x="500" y="385">geometry / animation (from BRIAGE)</text>
+  <rect class="dat" x="480" y="392" width="14" height="10"/><text x="500" y="401">data (curves, numbers, textures)</text>
+  <rect class="scr" x="480" y="408" width="14" height="10"/><text x="500" y="417">Lua script</text></g>
+</svg>
+<figcaption><b>Figure 1.1 · The sample electric locomotive as the game sees it.</b> Nothing is embedded: every arrow is a path string
+inside the parent file. Break one path or misspell one node name and that feature silently disappears (or the export fails).
+The same <code>.igs</code> holds the body, bogies and wheels; the bogie blueprints refer to their parts by <b>node name</b>
+(<code>bo01</code>, <code>bo01wh01</code>…), not by file.</figcaption>
+</figure>
+
+<div class="box"><span class="t">Key idea</span>
+<p>Your Blender scene produces only the orange boxes. Everything blue, green and purple is authored in BPE2, a text editor or a
+Lua editor. The game joins them by <b>names</b>: file paths, node names, animation IDs and control names. Most “it doesn't work”
+problems are a broken name somewhere in this graph.</p></div>
+
+<h1>2 · The components inside a vehicle blueprint</h1>
+<p>A vehicle blueprint is an <b>entity</b> made of <b>components</b>. Each component is a top-level <code>&lt;Attribute&gt;</code>
+in the XML. This is the list from the sample electric, and what the game does with each one. <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:44mm">Component (XML attribute)</th><th>What it holds</th><th style="width:34mm">What the game does with it</th></tr></thead>
+<tbody>
+<tr><td><code>RenderComponent</code><br><span class="small">cAnimObjectRenderBlueprint</span></td><td>Exterior <code>GeometryID</code> (.igs), <code>CollisionGeometryID</code>, primary/secondary named texture sets (number digits), shadow type, LOD range and the <code>AnimSet</code> list (ID → .ia file, “animate in editor”).</td><td>Draws the vehicle; plays exterior animations by ID.</td></tr>
+<tr><td><code>RailVehicleComponent</code><br><span class="small">cEngineComponentBlueprint (engine)</span></td><td>Mass, derailment ease, body pivots, collision box, drag, rolling friction, wheel-rail friction (dry/wet/snow), sand multiplier, <code>Bogey[]</code> list, coupling blueprints and pivot matrices, driver position, <code>EngineType</code>, <code>MaxPermissibleSpeed</code>, numbering CSV.</td><td>Puts the vehicle on the track and moves it as a rigid body.</td></tr>
+<tr><td><code>EngineSimulationContainer</code></td><td>Path to the <b>engine simulation blueprint</b> (traction, brakes, air system, dynamic brake, curves).</td><td>Turns control values into tractive and brake force. Engines only.</td></tr>
+<tr><td><code>ControlContainerComponent</code></td><td><code>InteriorInterface</code> (cab .igs, cab camera, single/double cab) and the <code>ControlValues</code> list, each with its interface elements (levers, buttons, needles, exterior animations, visibility objects).</td><td>Creates the named controls and wires cab clicks and keys to them.</td></tr>
+<tr><td><code>ScriptComponent</code></td><td>Path to a Lua script (compiled to <code>.out</code> on export).</td><td>Runs your custom logic (Part&nbsp;5).</td></tr>
+<tr><td><code>ContainerComponent</code><br><span class="small">cEntityContainerBlueprint</span></td><td>Child entities with a name and matrix: lights, particle emitters (smoke, sparks), sound sources.</td><td>Spawns attached sub-objects that scripts can address by child name.</td></tr>
+<tr><td><code>PosOriComponent</code></td><td>Position/orientation holder (empty in the samples).</td><td>Engine-managed; nothing to author.</td></tr>
+</tbody></table>
+<p>The <b>engine simulation blueprint</b> is its own file with one <b>subsystem</b>, whose class decides the powertrain:</p>
+<table>
+<thead><tr><th style="width:62mm">Subsystem class</th><th>Powertrain</th><th>Sample</th></tr></thead>
+<tbody>
+<tr><td><code>cElectricSubSystemBlueprint</code></td><td>Electric (pantograph or 3rd rail). Current limits, thyristor/notched control, dynamic brake.</td><td>Sample Electric: 6600 / 300, 145&nbsp;mph</td></tr>
+<tr><td><code>cDieselElectricSubSystemBlueprint</code></td><td>Diesel engine → generator → traction motors; field divert stages, fuel use.</td><td>(EMD F7A in the handoff doc)</td></tr>
+<tr><td><code>cSteamSubSystemBlueprint</code></td><td>Full steam model: firebox, boiler, safety valves, cylinders, injectors, blower, ejectors, regulator.</td><td>SDJR 7F: 200&nbsp;psi, 2 × 21″×28″</td></tr>
+</tbody></table>
+
+<h1>3 · How the game places a vehicle on the track</h1>
+<p>TSC treats the body as a <b>rigid object</b> carried by its bogie pivots. Bogies follow the track spline and turn about their
+pivot points. Wheels are just nodes that spin at a rate derived from speed and wheel radius. Couplers are points at each end that
+lock to the neighbouring vehicle's receiving point. The drawing below uses the sample electric's real numbers.</p>
+
+<figure>
+<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2330"/></marker></defs>
+  <!-- scale: 31.4 px per metre, origin x=360, rail y=270 -->
+  <!-- collision box (1.25..4.0 m, ±9 m) -->
+  <!-- body -->
+  <path d="M60,232 L60,150 Q62,128 90,128 L630,128 Q658,128 660,150 L660,232 Z" fill="#dfe8f2" stroke="#16324f" stroke-width="1.6"/>
+  <rect x="96" y="144" width="40" height="24" fill="#fff" stroke="#16324f"/><rect x="584" y="144" width="40" height="24" fill="#fff" stroke="#16324f"/>
+  <!-- pantographs -->
+  <path d="M530,128 L545,110 L560,128 M540,108 L556,108" stroke="#16324f" stroke-width="1.4" fill="none"/>
+  <path d="M168,128 L183,110 L198,128 M178,108 L194,108" stroke="#16324f" stroke-width="1.4" fill="none"/>
+  <!-- bogie frames -->
+  <rect x="455" y="238" width="160" height="16" rx="3" fill="#8a96a6"/><rect x="105" y="238" width="160" height="16" rx="3" fill="#8a96a6"/>
+  <!-- wheels r=0.525 m -> 16.5 px, centre y=270-16.5 -->
+  <g fill="#fff" stroke="#16324f" stroke-width="1.5">
+    <circle cx="604.9" cy="253.5" r="16.5"/><circle cx="535.3" cy="253.5" r="16.5"/><circle cx="466" cy="253.5" r="16.5"/>
+    <circle cx="254" cy="253.5" r="16.5"/><circle cx="184.7" cy="253.5" r="16.5"/><circle cx="115.4" cy="253.5" r="16.5"/>
+  </g>
+  <rect x="77" y="144.4" width="566" height="86.4" fill="none" stroke="#b3261e" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <!-- rail -->
+  <line x1="20" y1="270" x2="700" y2="270" stroke="#1b2330" stroke-width="2.5"/>
+  <text x="24" y="284" fill="#5b6676">rail head = height 0</text>
+  <!-- origin -->
+  <circle cx="360" cy="270" r="4.5" fill="#b3261e"/><line x1="360" y1="270" x2="360" y2="116" stroke="#b3261e" stroke-dasharray="2 3"/>
+  <!-- bogie pivots: mesh 5.583 vs blueprint 6.25 -->
+  <line x1="535.3" y1="232" x2="535.3" y2="300" stroke="#1f6fb2" stroke-width="1.5"/>
+  <line x1="556.3" y1="232" x2="556.3" y2="300" stroke="#b3261e" stroke-width="1.5"/>
+  <line x1="184.7" y1="232" x2="184.7" y2="300" stroke="#1f6fb2" stroke-width="1.5"/>
+  <!-- couplers -->
+  <circle cx="643.4" cy="237.8" r="4" fill="#177a6e"/><circle cx="75.7" cy="237.8" r="4" fill="#177a6e"/>
+  <line x1="647" y1="237.8" x2="668" y2="237.8" stroke="#177a6e" stroke-width="2"/><line x1="52" y1="237.8" x2="72" y2="237.8" stroke="#177a6e" stroke-width="2"/>
+  <!-- front arrow -->
+  <line x1="600" y1="96" x2="690" y2="96" stroke="#1b2330" stroke-width="1.6" marker-end="url(#a3)"/>
+  <text x="600" y="89">FRONT</text>
+  <!-- callouts -->
+  <g font-weight="bold" fill="#fff">
+    <circle cx="360" cy="306" r="8" fill="#b3261e"/><text x="360" y="309.5" text-anchor="middle">1</text>
+    <circle cx="535.3" cy="314" r="8" fill="#1f6fb2"/><text x="535.3" y="317.5" text-anchor="middle">2</text>
+    <circle cx="560" cy="330" r="8" fill="#b3261e"/><text x="560" y="333.5" text-anchor="middle">3</text>
+    <circle cx="604.9" cy="222" r="8" fill="#16324f"/><text x="604.9" y="225.5" text-anchor="middle">4</text>
+    <circle cx="676" cy="252" r="8" fill="#177a6e"/><text x="676" y="255.5" text-anchor="middle">5</text>
+    <circle cx="648" cy="118" r="8" fill="#b3261e"/><text x="648" y="121.5" text-anchor="middle">6</text>
+    <circle cx="545" cy="96" r="8" fill="#16324f"/><text x="545" y="99.5" text-anchor="middle">7</text>
+  </g>
+  <!-- dims -->
+  <line x1="60" y1="60" x2="660" y2="60" stroke="#5b6676" marker-start="url(#a3)" marker-end="url(#a3)"/>
+  <text x="360" y="54" text-anchor="middle" fill="#5b6676">mesh length 19.12 m (−9.567 … +9.556)</text>
+  <line x1="40" y1="270" x2="40" y2="128" stroke="#5b6676" marker-start="url(#a3)" marker-end="url(#a3)"/>
+  <text x="34" y="200" text-anchor="middle" fill="#5b6676" transform="rotate(-90 34 200)">4.53 m</text>
+</svg>
+<figcaption><b>Figure 1.2 · Side view of the sample electric (front to the right), to scale.</b>
+<b>1</b> Vehicle origin: centre of the vehicle, on the rail head. Everything is measured from here.
+<b>2</b> Front bogie as modelled (<code>bo01</code> at +5.583&nbsp;m).
+<b>3</b> Front bogie pivot as the blueprint defines it (<code>BogeyPivotX</code> = 6.25&nbsp;m). The game uses this one.
+<b>4</b> Axles at ±2.2&nbsp;m from the bogie centre (bogie blueprint <code>HorizontalOffset</code>); radius 0.55&nbsp;m in the blueprint, 0.525&nbsp;m in the mesh.
+<b>5</b> Coupling pivot 1.025&nbsp;m high at +9.025&nbsp;m; receiving point at +9.14&nbsp;m.
+<b>6</b> Collision box (dashed): 18&nbsp;m long, 1.25–4.0&nbsp;m high. Shorter and lower than the mesh.
+<b>7</b> Pantographs (animated nodes <code>panto01_part01..03</code>). <span class="pill v">verified</span></figcaption>
+</figure>
+
+<table>
+<thead><tr><th style="width:52mm">Field</th><th>Where it lives</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>BogeyPivotX</code> / <code>BogeyPivotY</code></td><td>Vehicle bp → <code>Bogey[]</code></td><td>Where each bogie pivots (along track / height). <b>Has the final say</b> over the mesh position.</td></tr>
+<tr><td><code>Geometry</code>, <code>Axle[].NodeId</code></td><td>Bogie bp</td><td>Node names of the bogie frame and each wheelset inside the vehicle's .igs.</td></tr>
+<tr><td><code>WheelRadius</code>, <code>Axle[].Radius</code>, <code>HorizontalOffset</code></td><td>Bogie bp</td><td>Radius drives wheel spin rate and sound; offset is along the track from the bogie pivot.</td></tr>
+<tr><td><code>FrontPivotX</code> / <code>BackPivotX</code></td><td>Vehicle bp</td><td>Body pivot points (±9.515&nbsp;m on the electric, +6.6/−4.185 on the steam). <span class="pill u">check</span> How the game weighs these against bogie pivots is undocumented; keep them near the vehicle ends as the samples do.</td></tr>
+<tr><td><code>Front/RearCouplingPivot</code>, <code>…ReceivingPoint</code></td><td>Vehicle bp (4×4 matrices)</td><td>Coupler position and direction. The rear matrix is rotated 180° (diagonal −1,1,−1). <span class="pill v">verified</span></td></tr>
+<tr><td><code>Collision*</code></td><td>Vehicle bp</td><td>Box for collisions and derailment; <code>CollisionCentreX</code> is along track, <code>…Y</code> is height of the box centre.</td></tr>
+<tr><td><code>DriverPosition</code></td><td>Vehicle bp (matrix)</td><td>Where the driver figure/camera anchor sits.</td></tr>
+</tbody></table>
+
+<h1>4 · Three coordinate systems and how they map</h1>
+<div class="two">
+<div>
+<figure>
+<svg viewBox="0 0 330 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+  <text x="80" y="18" text-anchor="middle" font-weight="bold">Blender</text>
+  <g stroke-width="2.2">
+    <line x1="80" y1="140" x2="80" y2="50" stroke="#177a6e" marker-end="url(#a4)"/>
+    <line x1="80" y1="140" x2="160" y2="110" stroke="#1f6fb2" marker-end="url(#a4)"/>
+    <line x1="80" y1="140" x2="20" y2="175" stroke="#b3261e" marker-end="url(#a4)"/>
+  </g>
+  <text x="86" y="52" fill="#177a6e" font-weight="bold">Z up</text><text x="140" y="102" fill="#1f6fb2" font-weight="bold">Y forward</text><text x="14" y="194" fill="#b3261e" font-weight="bold">X right</text>
+  <text x="250" y="18" text-anchor="middle" font-weight="bold">TSC files</text>
+  <g stroke-width="2.2">
+    <line x1="250" y1="140" x2="250" y2="50" stroke="#177a6e" marker-end="url(#a4)"/>
+    <line x1="250" y1="140" x2="320" y2="110" stroke="#1f6fb2" marker-end="url(#a4)"/>
+    <line x1="250" y1="140" x2="190" y2="175" stroke="#b3261e" marker-end="url(#a4)"/>
+  </g>
+  <text x="256" y="52" fill="#177a6e" font-weight="bold">Y up</text><text x="266" y="102" fill="#1f6fb2" font-weight="bold">Z forward</text><text x="184" y="194" fill="#b3261e" font-weight="bold">X right</text>
+  <rect x="20" y="210" width="290" height="34" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="165" y="231" text-anchor="middle" font-family="DejaVu Sans Mono, monospace">TSC (x, y, z) = Blender (x, z, y)</text>
+</svg>
+<figcaption><b>Figure 1.3 · Axis mapping.</b> BRIAGE performs this swap on export; the sample's 33 transforms match
+Blender exactly after it. <span class="pill v">verified</span></figcaption>
+</figure>
+</div>
+<div>
+<h3>The third system: blueprint 2D fields</h3>
+<p>Many vehicle blueprint fields describe a side view and use only two axes:</p>
+<table><thead><tr><th>Blueprint</th><th>TSC file</th><th>Blender</th></tr></thead>
+<tbody><tr><td><b>X</b> (along track)</td><td>Z</td><td>Y</td></tr>
+<tr><td><b>Y</b> (height)</td><td>Y</td><td>Z</td></tr></tbody></table>
+<p>So <code>BogeyPivotX = 6.25</code> means “6.25&nbsp;m forward of the origin”, which is Blender <b>Y</b> = 6.25.</p>
+<p>Matrices (<code>FrontCouplingPivot</code>, <code>DriverPosition</code>) are full 4×4 transforms in <b>TSC file axes</b>,
+row-major, with the translation in elements 13–15. Example from the sample:
+<code>… 0, 1.025, 9.025, 1</code> = 1.025&nbsp;m up, 9.025&nbsp;m forward. <span class="pill v">verified</span></p>
+</div>
+</div>
+
+<h1>5 · Control values: the bus everything talks through</h1>
+<p>A <b>control value</b> is a named floating-point number on a vehicle, declared in the vehicle blueprint with a default,
+minimum and maximum. It is the single most important concept for custom behaviour: <b>every part of a vehicle communicates only
+by reading and writing control values.</b></p>
+
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker>
+  <marker id="a5g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#177a6e"/></marker></defs>
+  <!-- bus -->
+  <rect x="260" y="40" width="200" height="220" rx="8" fill="#16324f"/>
+  <text x="360" y="62" text-anchor="middle" fill="#fff" font-weight="bold" font-size="11">Control values</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9" fill="#cfe3f5">
+    <text x="276" y="86">Regulator       0 … 1</text><text x="276" y="102">Reverser       −1 … 1</text>
+    <text x="276" y="118">TrainBrakeControl 0 … 1</text><text x="276" y="134">PantographControl 0/1</text>
+    <text x="276" y="150">Wipers, Headlights …</text><text x="276" y="172" fill="#8cc4f2">SpeedometerMPH (out)</text>
+    <text x="276" y="188" fill="#8cc4f2">Ammeter, pressures (out)</text>
+    <text x="276" y="212" fill="#f5d08c">MyCustomState  (yours)</text><text x="276" y="228" fill="#f5d08c">TrolleyPoleFront (yours)</text>
+  </g>
+  <!-- inputs -->
+  <g>
+    <rect x="10" y="40" width="210" height="44" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="58" font-weight="bold">Cab click / drag</text><text x="20" y="74">on pick node, e.g. “throttle”</text>
+    <rect x="10" y="94" width="210" height="36" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="116" font-weight="bold">Keyboard, HUD, gamepad</text>
+    <rect x="10" y="140" width="210" height="36" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="162" font-weight="bold">AI driver</text>
+    <rect x="10" y="186" width="210" height="44" rx="5" fill="#f3effa" stroke="#6b4fa0"/><text x="20" y="204" font-weight="bold">Lua</text><text x="20" y="220">SetControlValue(name, 0, v)</text>
+  </g>
+  <g stroke="#1f6fb2" stroke-width="1.6" fill="none" marker-end="url(#a5)">
+    <line x1="220" y1="62" x2="258" y2="80"/><line x1="220" y1="112" x2="258" y2="110"/><line x1="220" y1="158" x2="258" y2="140"/><line x1="220" y1="208" x2="258" y2="210"/>
+  </g>
+  <!-- consumers -->
+  <g>
+    <rect x="500" y="30" width="210" height="44" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="510" y="48" font-weight="bold">Cab animation</text><text x="510" y="64">sample_throttle.ia at value</text>
+    <rect x="500" y="82" width="210" height="44" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="510" y="100" font-weight="bold">Exterior animation</text><text x="510" y="116">AnimationID “frontPanto”</text>
+    <rect x="500" y="134" width="210" height="44" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="510" y="152" font-weight="bold">Engine simulation</text><text x="510" y="168">reads Regulator, brake handle …</text>
+    <rect x="500" y="186" width="210" height="36" rx="5" fill="#f3effa" stroke="#6b4fa0"/><text x="510" y="208" font-weight="bold">Lua GetControlValue</text>
+    <rect x="500" y="230" width="210" height="36" rx="5" fill="#f4f6f9" stroke="#8a96a6"/><text x="510" y="252" font-weight="bold">Sounds, lights, visibility</text>
+  </g>
+  <g stroke="#1f6fb2" stroke-width="1.6" fill="none" marker-end="url(#a5)">
+    <line x1="460" y1="80" x2="498" y2="54"/><line x1="460" y1="100" x2="498" y2="104"/><line x1="460" y1="130" x2="498" y2="156"/><line x1="460" y1="200" x2="498" y2="204"/><line x1="460" y1="240" x2="498" y2="248"/>
+  </g>
+  <path d="M500,172 L462,180" stroke="#177a6e" stroke-width="1.8" fill="none" stroke-dasharray="4 2" marker-end="url(#a5g)"/>
+  <text x="360" y="284" text-anchor="middle" fill="#177a6e" font-size="9">dashed green: the simulation writes output controls back into the bus (speed, amps, pressures)</text>
+</svg>
+<figcaption><b>Figure 1.4 · The control-value bus.</b> Inputs on the left write; consumers on the right read. Nothing talks to
+anything else directly. A cab lever does not “know” about traction: it only changes <code>Regulator</code>, and the simulation
+reads <code>Regulator</code>. That is why you can add features by <b>adding your own control values</b> (yellow) and driving
+animations or logic from them.</figcaption>
+</figure>
+
+<h3>Rules of the bus</h3>
+<ul>
+<li><b>Names are the contract.</b> The simulation finds its inputs by name. The brake is explicit: the simulation's
+<code>CabControlName</code> must equal a <code>ControlName</code> in the vehicle blueprint (<code>TrainBrakeControl</code> in both
+samples) <span class="pill v">verified</span>. Throttle and reverser use the conventional names <code>Regulator</code> and
+<code>Reverser</code>; keep them <span class="pill u">check</span>.</li>
+<li><b>Range maps to animation.</b> A cab lever's <code>.ia</code> is played <em>scrubbed to the value</em>: minimum at the first
+frame, maximum at the last. Model and key every lever from its minimum position to its maximum.</li>
+<li><b>Defaults are spawn state.</b> <code>DefaultValue</code> is the value at spawn. The sample electric's
+<code>TrainBrakeControl</code> default of 0.7 means it spawns braked; the steam example's 1.0 means fully applied. <span class="pill v">verified</span></li>
+<li><b>Custom controls are free.</b> A control value does not need a lever. Declare <code>TrolleyPoleFront</code> with range 0–1,
+point an exterior animation at it, and let Lua write it. This is the backbone of every scripted feature in Part&nbsp;5.</li>
+<li><b>Difficulty filters elements.</b> Interface elements carry a <code>DifficultyType</code> (StopGo / Intermediate / Expert),
+which is how the sample has both <code>SimpleThrottle</code> and <code>Regulator</code> on the same physical lever.</li>
+</ul>
+
+<h1>6 · The traction and braking chain</h1>
+<p>You do not program physics directly; you give the subsystem limits and lookup curves. This is the working model to design against.
+The “minimum of three limits” rule comes from the project's handoff document and is consistent with both samples.
+<span class="pill u">check</span> Verify final behaviour in game with Lua (<code>Call("GetTractiveEffort")</code>) rather than trusting the model.</p>
+
+<figure>
+<svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b2330"/></marker></defs>
+  <g stroke="#1b2330" stroke-width="1.3" fill="none" marker-end="url(#a6)">
+    <line x1="150" y1="40" x2="228" y2="95"/><line x1="150" y1="110" x2="228" y2="110"/><line x1="150" y1="180" x2="228" y2="125"/>
+    <line x1="318" y1="110" x2="358" y2="110"/><line x1="478" y1="110" x2="518" y2="110"/>
+    <line x1="600" y1="140" x2="600" y2="170"/><line x1="520" y1="210" x2="470" y2="210"/><line x1="350" y1="210" x2="300" y2="210"/>
+  </g>
+  <rect x="10" y="20" width="140" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="37" font-weight="bold">Throttle curve</text><text x="20" y="51">TE vs Regulator %</text>
+  <rect x="10" y="90" width="140" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="20" y="107" font-weight="bold">Speed curve</text><text x="20" y="121">max TE vs speed</text>
+  <rect x="10" y="160" width="140" height="40" rx="5" fill="#fbeceb" stroke="#b3261e"/><text x="20" y="177" font-weight="bold">MaxForce</text><text x="20" y="191">hard cap</text>
+  <circle cx="273" cy="110" r="44" fill="#16324f"/><text x="273" y="106" text-anchor="middle" fill="#fff" font-weight="bold" font-size="12">min( )</text><text x="273" y="122" text-anchor="middle" fill="#cfe3f5">demanded TE</text>
+  <rect x="360" y="85" width="118" height="50" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="370" y="104" font-weight="bold">Adhesion limit</text><text x="370" y="119">mass × friction</text><text x="370" y="131" font-size="8.5">(dry/wet/snow × sand)</text>
+  <rect x="520" y="80" width="190" height="60" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="530" y="98" font-weight="bold">Force at the rail</text><text x="530" y="113">exceeds adhesion → wheelslip</text><text x="530" y="128">(sanding raises the limit)</text>
+  <rect x="520" y="172" width="190" height="76" rx="5" fill="#f4f6f9" stroke="#8a96a6"/><text x="530" y="190" font-weight="bold">Minus resistances</text><text x="530" y="205">drag coefficient, rolling</text><text x="530" y="219">friction, gradient,</text><text x="530" y="233">train &amp; loco brakes</text>
+  <rect x="350" y="185" width="120" height="50" rx="5" fill="#fff" stroke="#16324f"/><text x="360" y="205" font-weight="bold">F = m·a</text><text x="360" y="222">consist mass</text>
+  <rect x="160" y="185" width="140" height="50" rx="5" fill="#16324f"/><text x="170" y="205" fill="#fff" font-weight="bold">New speed</text><text x="170" y="222" fill="#cfe3f5">feeds the speed curve</text>
+  <path d="M160,212 C60,250 60,150 80,132" stroke="#1b2330" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#a6)"/>
+</svg>
+<figcaption><b>Figure 1.5 · Traction chain for electric and diesel-electric subsystems.</b> Steam replaces the two curves with
+<code>TractiveEffortVsCutoff</code> (a 0–1 multiplier over cutoff, see the 7F sample) and <code>TractiveEffortLinearVsSpeed</code>,
+with boiler pressure and regulator opening governing how much steam is available.</figcaption>
+</figure>
+
+<div class="two">
+<div class="box rule"><span class="t">Design rules that follow</span><ul>
+<li>MaxForce must be at least the peak of the throttle and speed curves, or the top of the curves is unreachable. The sample electric does this exactly (throttle curve 0→300, MaxForce 300). <span class="pill v">verified</span></li>
+<li>The throttle curve must start at 0,0 or the vehicle creeps at zero throttle.</li>
+<li>End the speed curve at or beyond MaxSpeed.</li>
+<li>Mass and friction decide whether that force can be used at all.</li>
+</ul></div>
+<div class="box warn"><span class="t">Unit labels are not conversions</span>
+<p>BPE2 stores a <code>mUnits</code> label next to what you typed, but the samples show the stored value equals the typed value
+(the 7F's MaxForce is typed as 35.296 “Lb/f”, stored as 35.296; the real engine's tractive effort is 35,296&nbsp;lbf).
+Treat labels as hints, compare with a known-good vehicle, and measure in game. <span class="pill v">verified</span></p></div>
+</div>
+
+<h1>7 · Engine vs wagon vs tender</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <g>
+    <rect x="10" y="10" width="220" height="210" rx="7" fill="#fff" stroke="#16324f" stroke-width="1.6"/>
+    <rect x="10" y="10" width="220" height="28" rx="7" fill="#16324f"/><text x="120" y="29" text-anchor="middle" fill="#fff" font-weight="bold">Engine (drivable)</text>
+    <rect x="250" y="10" width="220" height="210" rx="7" fill="#fff" stroke="#16324f" stroke-width="1.6"/>
+    <rect x="250" y="10" width="220" height="28" rx="7" fill="#16324f"/><text x="360" y="29" text-anchor="middle" fill="#fff" font-weight="bold">Wagon / coach (hauled)</text>
+    <rect x="490" y="10" width="220" height="210" rx="7" fill="#fff" stroke="#16324f" stroke-width="1.6"/>
+    <rect x="490" y="10" width="220" height="28" rx="7" fill="#16324f"/><text x="600" y="29" text-anchor="middle" fill="#fff" font-weight="bold">Tender (steam only)</text>
+  </g>
+  <g>
+    <text x="22" y="60">✔ Render (geometry, animations)</text><text x="22" y="80">✔ Rail vehicle (mass, bogies, couplers)</text>
+    <text x="22" y="100">✔ Engine simulation blueprint</text><text x="22" y="120">✔ Controls + cab interior</text>
+    <text x="22" y="140">✔ Script (optional but usual)</text><text x="22" y="160">✔ Children: lights, emitters</text>
+    <text x="22" y="186" fill="#5b6676">New ▸ Engine blueprint</text><text x="22" y="202" fill="#5b6676">cEngineBlueprint</text>
+    <text x="262" y="60">✔ Render (geometry, animations)</text><text x="262" y="80">✔ Rail vehicle (mass, bogies, couplers)</text>
+    <text x="262" y="100">✔ Train brake equipment</text><text x="262" y="120" fill="#b3261e">✘ No engine simulation</text>
+    <text x="262" y="140" fill="#b3261e">✘ No cab (normally)</text><text x="262" y="160">○ Script optional (doors, loads)</text>
+    <text x="262" y="186" fill="#5b6676">New ▸ Wagon blueprint</text><text x="262" y="202" fill="#5b6676">(verify class name in BPE2)</text>
+    <text x="502" y="60">✔ Render, rail vehicle</text><text x="502" y="80">✔ Water and coal capacity</text>
+    <text x="502" y="100">✔ Feeds the engine's</text><text x="502" y="116">   “TenderRequired”</text><text x="502" y="136" fill="#5b6676">The 7F sim sets</text><text x="502" y="152" fill="#5b6676">TenderRequired = eTrue</text>
+    <text x="502" y="186" fill="#5b6676">New ▸ Tender blueprint</text>
+  </g>
+</svg>
+<figcaption><b>Figure 1.6 · What each vehicle type carries.</b> A wagon is an engine without the engine: same rendering,
+bogies, couplers and brakes, no powertrain, no controls to drive. Everything in Part&nbsp;2 (modelling) and Part&nbsp;3
+(exterior animations) applies to both. <span class="pill u">check</span> Wagon and tender field names: confirm against a stock
+wagon/tender blueprint in your BPE2.</figcaption>
+</figure>
+
+<h1>8 · What happens when a scenario loads</h1>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#16324f"/></marker></defs>
+  <line x1="10" y1="60" x2="705" y2="60" stroke="#16324f" stroke-width="2" marker-end="url(#a8)"/>
+  <g font-weight="bold" fill="#fff">
+    <circle cx="60" cy="60" r="10" fill="#1f6fb2"/><circle cx="190" cy="60" r="10" fill="#1f6fb2"/><circle cx="320" cy="60" r="10" fill="#6b4fa0"/>
+    <circle cx="450" cy="60" r="10" fill="#6b4fa0"/><circle cx="590" cy="60" r="10" fill="#6b4fa0"/>
+  </g>
+  <text x="60" y="36" text-anchor="middle" font-weight="bold">Load blueprints</text><text x="60" y="88" text-anchor="middle">.bin, .GeoPcDx,</text><text x="60" y="102" text-anchor="middle">textures, .ia</text>
+  <text x="190" y="36" text-anchor="middle" font-weight="bold">Controls created</text><text x="190" y="88" text-anchor="middle">at DefaultValue</text>
+  <text x="320" y="36" text-anchor="middle" font-weight="bold">Initialise()</text><text x="320" y="88" text-anchor="middle">once, before the</text><text x="320" y="102" text-anchor="middle">route is ready</text>
+  <text x="450" y="36" text-anchor="middle" font-weight="bold">Setup()</text><text x="450" y="88" text-anchor="middle">once, when the script</text><text x="450" y="102" text-anchor="middle">is initialised</text>
+  <text x="590" y="36" text-anchor="middle" font-weight="bold">Update(interval)</text><text x="590" y="88" text-anchor="middle">every frame, after</text><text x="590" y="102" text-anchor="middle">BeginUpdate</text>
+  <text x="360" y="136" text-anchor="middle" fill="#5b6676">Event callbacks fire in between: OnControlValueChange, OnConsistMessage, OnCameraEnter/Leave, OnCustomSignalMessage</text>
+</svg>
+<figcaption><b>Figure 1.7 · Load order.</b> Callback names and meanings from the TS2015 scripting reference; details in Part&nbsp;5.</figcaption>
+</figure>
+
+<h1>9 · The glue: names</h1>
+<p>Summarising the whole part in one table. Every row is a link that must match <b>exactly</b> (case included):</p>
+<table>
+<thead><tr><th style="width:52mm">This name…</th><th style="width:52mm">…must match</th><th>If it doesn't</th></tr></thead>
+<tbody>
+<tr><td>Bogie bp <code>Geometry</code> (<code>bo01</code>)</td><td>Node in exterior .igs</td><td>Bogie drawn but never turns</td></tr>
+<tr><td>Bogie bp <code>Axle[].NodeId</code></td><td>Wheel node in exterior .igs</td><td>Wheels do not spin</td></tr>
+<tr><td>Control element <code>PickTransformName</code></td><td>Node in cab .igs</td><td>Lever cannot be clicked</td></tr>
+<tr><td>Control element <code>AnimationName</code></td><td>An .ia file path</td><td>Lever works but does not move</td></tr>
+<tr><td>Exterior element <code>AnimationID</code></td><td>An ID in the RenderComponent <code>AnimSet</code></td><td>Pantograph/wiper never moves</td></tr>
+<tr><td>Visibility element <code>TransformName</code></td><td>Node in cab or exterior .igs</td><td>Lamp never shows (sample: <code>hs_aus_lit</code> is missing) <span class="pill v">verified</span></td></tr>
+<tr><td>Sim <code>CabControlName</code></td><td>A <code>ControlName</code></td><td>Brake handle does nothing</td></tr>
+<tr><td>Lua <code>Call("X:…")</code> child name</td><td>A child in <code>ContainerComponent</code></td><td>Call silently fails</td></tr>
+<tr><td>Lua control strings</td><td>A <code>ControlName</code></td><td><code>GetControlValue</code> returns nothing useful</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">Automate this table</span><p><code>tools/tsc_crosscheck.py</code> checks rows 1–7 against your exported
+geometry in one command (Part&nbsp;7). On the sample electric it reports the two missing cab nodes, the bogie offset,
+the wheel height and the short collision box.</p></div>
+
+</body></html>

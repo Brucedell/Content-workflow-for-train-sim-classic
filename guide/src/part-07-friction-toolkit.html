@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Part 7 — Removing Workflow Friction</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim Classic · Vehicle Workflow Guide</div>
+    <div class="partno">Part 7</div>
+    <h1>Removing workflow friction: the TSC Toolkit</h1>
+    <div class="sub">Three tools ship with this guide: a Blender add-on that validates the scene and writes blueprint data from the model, a
+      command-line cross-checker for blueprints against exported geometry, and an offline Lua test harness. Plus ideas for further scripts.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>The principle: one source of truth per kind of data</li>
+    <li>Installing the Blender add-on</li>
+    <li>Tags and empties the add-on reads</li>
+    <li>Validate</li>
+    <li>Name</li>
+    <li>Measure + write bogie XML, Patch vehicle blueprint</li>
+    <li>IA jobs</li>
+    <li>Lua skeleton</li>
+    <li>tsc_crosscheck.py</li>
+    <li>Offline Lua testing</li>
+    <li>Further scripts worth building (concepts)</li>
+    <li>The daily loop with the tools</li>
+  </ol></div>
+  <div class="foot">Files: <code>tools/blender/tsc_toolkit.py</code> (Blender 4.2+ add-on), <code>tools/tsc_crosscheck.py</code> (Python 3, standard library only),
+  <code>tools/lua_mock/run_trolley_test.py</code> (Python 3 + <code>lupa</code>). The add-on's logic was exercised headless in Blender&nbsp;4.2 (bpy) on a
+  synthetic locomotive; the cross-checker was run on the supplied Kuju samples. Test in your own Blender before relying on them.</div>
+</section>
+
+<h1>1 · The principle: one source of truth per kind of data</h1>
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#177a6e"/></marker>
+  <marker id="m9b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker></defs>
+  <rect x="10" y="20" width="200" height="200" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="20" y="40" font-weight="bold">Blender owns geometry</text>
+  <text x="20" y="60">node names, hierarchy</text><text x="20" y="76">bogie + wheel positions</text><text x="20" y="92">wheel radius</text><text x="20" y="108">coupler + driver empties</text><text x="20" y="124">collision extents</text><text x="20" y="140">animations (.ia)</text><text x="20" y="156">control tags (tsc_control)</text>
+  <rect x="260" y="20" width="200" height="90" rx="7" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.5"/>
+  <text x="270" y="40" font-weight="bold">Toolkit writes</text><text x="270" y="58">bogie blueprints (.xml)</text><text x="270" y="74">vehicle bp fields (patch)</text><text x="270" y="90">manifest.json, Lua constants</text>
+  <rect x="260" y="130" width="200" height="90" rx="7" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+  <text x="270" y="150" font-weight="bold">BPE2 owns behaviour</text><text x="270" y="168">mass, friction, brakes</text><text x="270" y="184">simulation, curves</text><text x="270" y="200">controls, cab elements</text>
+  <rect x="510" y="20" width="200" height="200" rx="7" fill="#16324f"/>
+  <text x="520" y="40" font-weight="bold" fill="#fff">crosscheck verifies</text>
+  <text x="520" y="60" fill="#cfe3f5">every name link</text><text x="520" y="76" fill="#cfe3f5">bogie/axle vs mesh</text><text x="520" y="92" fill="#cfe3f5">wheel height vs radius</text><text x="520" y="108" fill="#cfe3f5">collision vs extents</text><text x="520" y="124" fill="#cfe3f5">spawn defaults</text><text x="520" y="140" fill="#cfe3f5">curves vs MaxForce</text><text x="520" y="156" fill="#cfe3f5">brake/air sanity</text>
+  <g stroke-width="2" fill="none"><path d="M210,65 L258,65" stroke="#177a6e" marker-end="url(#m9)"/><path d="M460,65 L508,90" stroke="#177a6e" marker-end="url(#m9)"/><path d="M460,175 L508,150" stroke="#1f6fb2" marker-end="url(#m9b)"/></g>
+  <text x="360" y="244" text-anchor="middle" fill="#5b6676">Geometry facts flow one way: Blender → blueprint. Nothing geometric is typed by hand twice.</text>
+</svg>
+<figcaption><b>Figure 7.1 · Ownership.</b> The toolkit exists because the blueprint has the final say in game while the mesh is where you see
+the truth. Generating the blueprint side from the mesh removes the disagreement at its source.</figcaption>
+</figure>
+
+<h1>2 · Installing the Blender add-on</h1>
+<ol class="steps">
+<li>Edit ▸ Preferences ▸ Add-ons ▸ (drop-down) Install from Disk… ▸ choose <code>tools/blender/tsc_toolkit.py</code>. Enable “TSC Toolkit”.</li>
+<li>In the 3D Viewport press <kbd>N</kbd> ▸ tab <b>TSC</b>.</li>
+<li>Set <b>Output folder</b> to the vehicle's Source folder (e.g. <code>…\Default\Bogies</code> for bogie XML) and, for patching, pick the <b>Vehicle blueprint</b> .xml.</li>
+</ol>
+<p class="small">Requires Blender 4.2 or later (layered actions from 4.4 are supported). If you export with BRIAGE from a Blender 2.79 install, run the toolkit in
+your modelling Blender before transferring the model.</p>
+
+<h1>3 · Tags and empties the add-on reads</h1>
+<table>
+<thead><tr><th style="width:52mm">Tag / object</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Objects named <code>…boNN</code></td><td>Bogies (bo01 front). Their children named <code>…boNNwhNN</code> are wheelsets.</td></tr>
+<tr><td>Empty <code>tsc_coupling_front</code></td><td>Front coupler point; its Y axis points forward. Becomes <code>FrontCouplingPivot</code>.</td></tr>
+<tr><td>Empty <code>tsc_coupling_rear</code></td><td>Rear coupler, rotated 180° about Z. Becomes <code>RearCouplingPivot</code>.</td></tr>
+<tr><td>Empty <code>tsc_driver</code></td><td>Driver position (<code>DriverPosition</code>).</td></tr>
+<tr><td>Custom property <code>tsc_ia</code> = "sample_throttle"</td><td>This object's animation is exported as <code>sample_throttle.ia</code>.</td></tr>
+<tr><td>Custom property <code>tsc_control</code> = "Regulator"</td><td>This cab object drives that control (used for the Lua constants and the manifest).</td></tr>
+<tr><td><code>tsc_min</code>, <code>tsc_max</code>, <code>tsc_default</code></td><td>Control range, recorded in the manifest for reference.</td></tr>
+</tbody></table>
+<p>The <code>tsc_</code> empties are skipped by the naming check. Keep them in a collection you exclude from BRIAGE's export (or hide them if you use “Export visible”).</p>
+
+<h1>4 · Validate</h1>
+<p>Writes a report to the Text Editor block <b>TSC_Validation</b> and a summary in the status bar. Checks:</p>
+<div class="two">
+<ul>
+<li>Name prefix <code>L_DDDD_</code> present; <code>.00N</code> suffixes; length &gt; 24 (warn) / &gt; 31 (error); spaces.</li>
+<li>LOD chains: parent is LOD n−1, same base name, larger distance.</li>
+<li>Negative scale (error), unapplied scale (warn).</li>
+<li>More than 24 children on a node; more than 256 exportable objects.</li>
+<li>bo01 at +Y, bo02 at −Y; each bogie has <code>boNNwhNN</code> wheels.</li>
+<li>Each wheel's lowest point is on Z&nbsp;=&nbsp;0 (catches the sample's 0.525 vs 0.55 problem).</li>
+</ul>
+<ul>
+<li>Main body origin at 0,0,0.</li>
+<li>Actions that start after frame 0 (rest pose missing); non-linear keys.</li>
+<li>Animated root objects without a <code>tsc_ia</code> tag.</li>
+<li>Meshes without UV map or material; empty material slots; slots used by no face (the sample's stray <code>f1</code>).</li>
+<li>Image names with extra dots; images on a different drive from the .blend.</li>
+</ul>
+</div>
+<pre>ERROR 2_0400_engine: LOD distance 400 must be greater than parent's 500
+WARN  Handrail: no L_DDDD_ prefix - BRIAGE will rename it 1_1000_Handrail
+WARN  Handrail: unapplied scale (1.0, 2.0, 1.0) (IA files carry no scale; apply it)
+WARN  1_0000_throttle: action '1_0000_throttleAction' starts at frame 1; BRIAGE exports the IGS at frame 0 - key the rest pose on frame 0
+WARN  1_0500_engine: material slot 1 'f1' is not used by any face (it will still export)</pre>
+<p class="small">Real output from the headless test scene, which deliberately contained these mistakes.</p>
+
+<h1>5 · Name</h1>
+<p>Set <b>LOD</b> and <b>Distance</b>, select objects, press <b>Apply LOD name to selected</b>. The base name is kept, any old prefix and <code>.00N</code>
+suffix are removed: <code>Handrail.003</code> → <code>1_1000_Handrail</code>.</p>
+
+<h1>6 · Measure + write bogie XML, Patch vehicle blueprint</h1>
+<h3>Measure + write bogie XML</h3>
+<p>Reads the model and writes <code>tsc_manifest.json</code> plus one bogie blueprint per <code>boNN</code> (e.g. <code>bo01.xml</code>) in Kuju's source format:
+wheel radius measured from each wheel's vertical extent, axle offsets relative to the bogie origin, node names, gauge 1.435, stiffness/damping as the
+sample, <code>Powered</code> on (option for the rear bogie).</p>
+<pre>{ "index": 1, "node": "bo01", "pivot_x": 5.583, "pivot_y": 0.27,
+  "axles": [ { "node": "bo01wh01", "offset": 2.217, "radius": 0.525, "centre_height": 0.525 },
+             { "node": "bo01wh02", "offset": 0.0,   "radius": 0.525, "centre_height": 0.525 },
+             { "node": "bo01wh03", "offset": -2.206,"radius": 0.525, "centre_height": 0.525 } ] }
+"collision": { "CollisionCentreX": 0.0, "CollisionCentreY": 2.2515, "CollisionLength": 19.124,
+               "CollisionWidth": 2.856, "CollisionHeight": 4.563 }
+"couplings": { "FrontCouplingPivot": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,1.025,9.14,1],
+               "RearCouplingPivot":  [-1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,1.025,-9.14,1] }</pre>
+<p class="small">Manifest excerpt from the test scene built to the sample loco's dimensions. The rear coupler matrix reproduces the Kuju sample's
+(−1,&nbsp;1,&nbsp;−1) diagonal exactly, confirming the axis conversion.</p>
+<h3>Patch vehicle blueprint</h3>
+<p>Writes into the chosen engine/wagon blueprint: the five <code>Collision*</code> fields, each <code>Bogey[i].BogeyPivotX</code> (bogies matched in order, bo01 first),
+<code>FrontCouplingPivot</code>, <code>RearCouplingPivot</code> and <code>DriverPosition</code>. It updates both the real value and any ToolData “typed in” value, keeps a
+<code>.bak</code>, and lists every change in the text block <b>TSC_Patch</b>.</p>
+<div class="box warn"><span class="t">Limits</span><ul>
+<li>Close the blueprint in BPE2 first (or reload it afterwards). BPE2 may re-save its own formatting; that is fine.</li>
+<li>The collision box is the bounding box of LOD&nbsp;1 meshes excluding lights, shadows, digits, pantographs and wipers. Review it; you may want it shorter than
+the buffers, as Kuju did.</li>
+<li>Receiving points are not patched (the samples place them 0.1&nbsp;m beyond the pivots); add empties and extend the script if you need them.</li>
+</ul></div>
+
+<h1>7 · IA jobs</h1>
+<p>Tag each animated root object with <code>tsc_ia</code>. <b>Prepare next IA job</b> cycles through them alphabetically: selects the object, sets the frame range to
+its action (from 0), jumps to frame 0 and copies <code>name.ia</code> to the clipboard. Then press BRIAGE's IA Export and paste the name. Twelve cab animations
+become twelve clicks of the same two buttons.</p>
+<p>If you know your BRIAGE build's IA operator id (enable Preferences ▸ Interface ▸ Python Tooltips and hover the export button), type it into
+<b>BRIAGE IA operator</b>; the toolkit then calls it with <code>filepath=</code> and exports without the manual click. <span class="pill u">check</span> the operator's
+parameter names on your build.</p>
+
+<h1>8 · Lua skeleton</h1>
+<p>Writes <code>&lt;blend name&gt;_EngineScript.lua</code> (never overwrites) with a constant per tagged control, the pass-through
+<code>OnControlValueChange</code> (with the correct <code>== 1</code> test), <code>Initialise</code> calling <code>BeginUpdate</code>, and an <code>Update</code> gated by
+<code>GetIsPlayer</code>.</p>
+<pre>CTRL_REGULATOR = <span class="s">"Regulator"</span>
+CTRL_TROLLEYPOLEFRONT = <span class="s">"TrolleyPoleFront"</span></pre>
+
+<h1>9 · tsc_crosscheck.py</h1>
+<pre>python tools\tsc_crosscheck.py --engine Sample_Engine.xml --sim "Electric Engine Simulation.xml" ^
+    --bogies "Sample Bogie 01.xml" "Sample Bogie 02.xml" ^
+    --geo sample_engine.geo.xml --cabgeo sample_cab.geo.xml --csv TractiveEffortVsThrottle.csv</pre>
+<p>Real result on the Kuju sample electric (abridged):</p>
+<pre>==== ERROR (2) ====
+  [cab] control EngineStart -&gt; node 'start' (cInteriorPushButton) not found in cab geometry
+  [cab] control PantographControl -&gt; node 'hs_aus_lit' (cInteriorVisibilityObject) not found in cab geometry
+==== WARN (11) ====
+  [control] TrainBrakeControl default 0.70 - vehicle spawns with brakes applied
+  [bogie] bogie 'bo01' modelled at 5.583 m but blueprint pivot is 6.250 m (difference 0.667 m)
+  [axle] 'bo01wh01' wheel centre is 0.525 m above rail origin but radius is 0.550 m (0.025 m sunk into rail)
+  … (same for the other five wheelsets)
+  [body] collision length 18.00 differs from mesh length 19.12 by 1.12 m
+  [body] collision box top 4.00 m is below mesh top 4.53 m (roof/pantograph not covered)
+  [body] MaxPermissibleSpeed is 0.0 - AI and HUD will have no vehicle speed limit
+==== OK (15) ====
+  [cab] control Regulator -&gt; cab node 'throttle' found   … and 14 more links
+  [brake] brake CabControlName 'TrainBrakeControl' matches a ControlValue</pre>
+<p>Checks performed: duplicate control names; defaults outside min/max; spawn-braked default; every pick node, visibility transform and exterior
+AnimationID; bogie and axle nodes exist, positions and radii; collision box vs extents; coupling points; <code>MaxPermissibleSpeed</code>; MaxForce vs curve peaks;
+throttle curve origin; MaxContinuousForce ≤ MaxForce; <code>CabControlName</code> links; empty compressor; zero cut-out pressure; empty loco brake (info).
+Exit code 1 on any error, so it can gate a batch build.</p>
+
+<h1>10 · Offline Lua testing</h1>
+<p><code>tools/lua_mock/run_trolley_test.py</code> loads a script into a Lua runtime (<code>pip install lupa</code>), replaces <code>Call</code>/<code>SysCall</code> with a Python mock
+holding control values, speed, curvature and animation times, and steps <code>Update</code> at 60&nbsp;Hz. Copy it for your own scripts: mock only the calls you use,
+script the player's inputs, assert on control values and alerts. It turns a five-minute game round-trip into a one-second test.</p>
+
+<h1>11 · Further scripts worth building (concepts)</h1>
+<table>
+<thead><tr><th style="width:44mm">Idea</th><th>What it would do</th><th style="width:30mm">Friction removed</th></tr></thead>
+<tbody>
+<tr><td>LOD generator</td><td>For selected LOD&nbsp;1 objects, duplicate, add a Decimate modifier at a chosen ratio, rename to <code>2_DDDD_base</code>, parent correctly.</td><td>Hand-building LOD twins</td></tr>
+<tr><td>Shadow mesh generator</td><td>Convex hull (or decimated copy) per selected part, named <code>1_0400_shadow_base</code>, <code>shadow_</code> material with StencilShadow.fx.</td><td>Shadow modelling</td></tr>
+<tr><td>Control previewer</td><td>A custom property <code>tsc_value</code> 0–1 on each cab object, with a driver mapping it to the action frame, so you can check levers and needles at any value before export.</td><td>Export-to-check loops</td></tr>
+<tr><td>Custom keyword writer</td><td>Collect every object tagged <code>tsc_ia</code> (and its animated children) and write them into BRIAGE's Custom keywords table so animated parts are never merged.</td><td>Silent merge bugs</td></tr>
+<tr><td>Texture pipeline</td><td>Check power-of-two sizes, rename to a consistent scheme, collect into the Textures directory, warn on alpha where the shader ignores it.</td><td>Texture path errors</td></tr>
+<tr><td>Number-plate builder</td><td>Generate a <code>primarydigits_N</code> plane with N faces and <code>primarynumber_i</code> materials from a picked rectangle.</td><td>Fiddly UV/material set-up</td></tr>
+<tr><td>Control-value generator</td><td>From <code>tsc_control</code> tags, write the <code>ControlValues</code> XML (name, range, lever element, pick node, .ia path) for BPE2.</td><td>Typing controls twice</td></tr>
+<tr><td>Round-trip diff</td><td>Read a serz-converted GEO and compare node names, positions and materials against the scene (what the supplied scene read did by hand).</td><td>“What actually got exported?”</td></tr>
+</tbody></table>
+
+<h1>12 · The daily loop with the tools</h1>
+<ol class="steps">
+<li>Model / animate in Blender; tag cab objects (<code>tsc_ia</code>, <code>tsc_control</code>).</li>
+<li><b>Validate</b> until no errors.</li>
+<li>BRIAGE IGS export; <b>Prepare next IA job</b> → BRIAGE IA export, per animation.</li>
+<li><b>Measure + write bogie XML</b>, then <b>Patch vehicle blueprint</b>.</li>
+<li>BPE2: behaviour fields, controls, simulation; export.</li>
+<li>Convert the exported geometry with serz and run <b>tsc_crosscheck.py</b>; fix errors.</li>
+<li>Game test drive (Part&nbsp;6 order). Script changes: test offline with the Lua mock first.</li>
+</ol>
+
+</body></html>
