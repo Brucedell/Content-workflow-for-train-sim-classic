@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 5 — Scripting in TF3</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 5</div>
+    <h1>Scripting in TF3: transformators, and what carries over from TSC Lua</h1>
+    <div class="sub">TF3 vehicles have no per-vehicle gameplay script. What they have is a rendering-side hook, the transformator, that turns simulation state into animation
+      states and particle settings. This part explains it, maps the TSC Lua features onto it, and is honest about what does not translate.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Where code can run</li>
+    <li>The transformator: .trf.lua and its four functions</li>
+    <li>What updateFn sees and can do</li>
+    <li>Particles</li>
+    <li>Emitting models</li>
+    <li>The TSC features, one by one</li>
+    <li>Case: trolley poles in TF3</li>
+    <li>Mod parameters and game scripts (outside this guide)</li>
+    <li>Pitfalls</li>
+  </ol></div>
+  <div class="foot">Function names, parameters and limits are quoted from the Vehicle Advanced Topics page (“Transformator Scripts”). The example transformator
+  download mentioned there was not supplied; shapes below follow the manual's snippets.</div>
+</section>
+
+<h1>1 · Where code can run</h1>
+<table>
+<thead><tr><th style="width:40mm">Place</th><th>Runs when</th><th>Can do</th><th style="width:40mm">TSC analogue</th></tr></thead>
+<tbody>
+<tr><td>Transformator (<code>.trf.lua</code> + <code>.script</code>)</td><td>Every rendered frame for a vehicle in view <span class="pill v">manual</span></td><td>Set node transforms, start/scrub animations, tune particle emitters, emit extra models. Read-only simulation state. <b>No api beyond <code>api.type</code>.</b> <span class="pill v">manual</span></td><td>The animation/visual half of the engine script</td></tr>
+<tr><td>Mod script (<code>mod.lua</code>, parameters)</td><td>Load time</td><td>Alter resources, add parameters the player sets in the mod menu (page not supplied <span class="pill u">check</span>)</td><td>–</td></tr>
+<tr><td>Game scripts</td><td>During play (page “coming soon”)</td><td>Gameplay logic, GUI, commands via <code>api.*</code></td><td>Scenario scripting, not vehicle scripting</td></tr>
+</tbody></table>
+<div class="box rule"><span class="t">The one rule that shapes everything</span>
+<p>In TSC the script <em>decides</em> (it writes the controls the simulation reads). In TF3 the simulation decides and the transformator only <em>draws</em>. Nothing a transformator does
+changes speed, power, loading or routing. Anything from the TSC design that alters gameplay (thermal damage reducing tractive effort, a dewired pole cutting power, brake fade)
+has <b>no TF3 counterpart</b> at the vehicle level.</p></div>
+
+<h1>2 · The transformator: .trf.lua and its four functions</h1>
+<pre><span class="c">-- myloco.trf.lua</span>
+function data() return {
+  updateScript = {
+    fileName = "myloco.script@myloco.updateFn", params = {} },
+  updateParticleSystemScript = {
+    fileName = "myloco.script@myloco.updateParticleSystemFn", params = { smokeScale = "1.5" } },
+  getEmittableModelsScript = {
+    fileName = "myloco.script@myloco.getEmittableModelsFn", params = {} },
+  computeEmittedModelsScript = {
+    fileName = "myloco.script@myloco.computeEmittedModelsFn", params = {} },
+} end</pre>
+<p><span class="pill v">manual</span> Each entry names a function inside a <code>.script</code> file (<code>file@table.function</code>) and may pass a key/value <code>params</code> table that arrives as
+<code>captureParams</code>. The vehicle's <code>.mdl</code> references the transformator through <code>transformatorConfig</code>; without one, the <b>default</b> rail transformator runs and
+provides every event listed in Part&nbsp;3. “Less complex transformators result in better performance.” <span class="pill v">manual</span></p>
+
+<figure>
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="t5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <rect x="10" y="30" width="190" height="150" rx="7" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="20" y="50" font-weight="bold">transformatorParams</text>
+  <text x="20" y="70">entityId</text><text x="20" y="86">currentInfo / previousInfo:</text><text x="30" y="102">world (time, weather)</text><text x="30" y="118">vehicle (speed, power, accel…)</text><text x="30" y="134">landVehicle (side, reversed)</text><text x="30" y="150">railVehicle, tram</text><text x="20" y="168">static: vehicleStaticInfo, seats…</text>
+  <rect x="260" y="30" width="200" height="150" rx="7" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.6"/>
+  <text x="270" y="50" font-weight="bold">updateFn(capture, params, out)</text>
+  <text x="270" y="72">transformator_util helpers:</text><text x="280" y="88">addAnimationStatesRailVehicles</text><text x="280" y="104">scaleUserTransfIndicesLoadConfig</text>
+  <text x="270" y="126">your logic (pure Lua)</text>
+  <text x="270" y="150" fill="#5b6676">only api.type available</text>
+  <rect x="520" y="30" width="190" height="150" rx="7" fill="#4a2c5e"/>
+  <text x="530" y="50" font-weight="bold" fill="#fff">transfsOutput</text>
+  <g fill="#e9d8f5"><text x="530" y="70">getUserTransf / setUserTransf</text><text x="530" y="86">(node index, Mat4, absolute?)</text><text x="530" y="108">getAnimationStates</text><text x="530" y="124">addAnimationState(event,</text><text x="540" y="138">start, param, loop, reversed)</text><text x="530" y="160">triggerAnimation(event, t0, t1)</text></g>
+  <g stroke="#4a2c5e" stroke-width="1.8" marker-end="url(#t5)"><line x1="200" y1="105" x2="258" y2="105"/><line x1="460" y1="105" x2="518" y2="105"/></g>
+</svg>
+<figcaption><b>Figure 5.1 · The update function</b> <span class="pill v">manual</span>. Read state on the left, write animation states and transforms on the right. The manual's
+aircraft example scrubs a “nose_up” animation to a time derived from flight state, and triggers a transition when the state changes.</figcaption>
+</figure>
+
+<h1>3 · What updateFn sees and can do</h1>
+<pre>local transformator_util = require "transformator_util"   <span class="c">-- helper library (name per manual)</span>
+local myloco = {}
+
+myloco.updateFn = function(captureParams, params, transfsOutput)
+  if params.currentInfo.landVehicle ~= nil then
+    <span class="c">-- 1. keep the default rail behaviour (doors, parts on/off, wheels …)</span>
+    transformator_util.addAnimationStatesRailVehicles(
+      params.currentInfo.landVehicle.side, params.currentInfo.landVehicle.reversed, transfsOutput)
+    transformator_util.scaleUserTransfIndicesLoadConfig(params.currentInfo.vehicle.indicesLoadConfig, transfsOutput)
+
+    <span class="c">-- 2. your addition: scrub a 0..1000 ms "panto_raise" strip with speed (stopped = down, moving = up)</span>
+    local v = params.currentInfo.vehicle.speed or 0
+    local t = math.min(1000, math.floor(math.abs(v) * 400))
+    transfsOutput:addAnimationState("panto_raise", -1, t, false, false)
+  end
+end
+return myloco</pre>
+<p><span class="pill v">manual</span> for the helper names, <code>addAnimationState(event, start, param, loop, reversed)</code> and <code>triggerAnimation(event, t0, t1)</code>;
+<span class="pill u">check</span> the exact <code>require</code> path, the <code>speed</code> field name inside <code>vehicle</code>, and the time unit of <code>param</code> (the manual's example uses milliseconds,
+11000 for an 11-second strip). Always test for the presence of <code>currentInfo.*</code> sub-tables: “it is important to check if it exists before using the content.” <span class="pill v">manual</span></p>
+
+<h1>4 · Particles</h1>
+<pre>myloco.updateParticleSystemFn = function(captureParams, params, particleSystem)
+  if params.currentInfo.vehicle == nil then return end
+  local scale = 0.2 + 0.8 * (params.currentInfo.vehicle.powerOutput or 0)   <span class="c">-- field name: check</span>
+  for i = 0, particleSystem:getSize() - 1 do
+    if particleSystem:getParticleId(i) == "emitter_smoke_dark" then
+      particleSystem:setLifeTimeScale(i, scale * tonumber(captureParams.smokeScale or 1))
+    end
+  end
+end</pre>
+<p><span class="pill v">manual</span> for <code>getSize</code>, <code>getParticleId</code>, <code>setLifeTimeScale</code> and the recommended order (check state → precompute → iterate). This is the TF3 version of
+TSC's <code>Call("Main Smoke Stack:SetEmitterRate", …)</code>.</p>
+
+<h1>5 · Emitting models</h1>
+<p><code>getEmittableModelsFn</code> returns the list of model paths that may be emitted (fully qualified: <code>"mymod::/asset/x.mdl"</code>); <code>computeEmittedModelsFn</code> then calls
+<code>modelEmitter:emitModel(modelId, Mat4f, animationStates, parentNode, alignToTerrain)</code> to spawn them relative to a node. <span class="pill v">manual</span> Use it for things TSC did
+with child entities: a visible crew member not covered by seats, a swappable load, a trailing banner.</p>
+
+<h1>6 · The TSC features, one by one</h1>
+<table>
+<thead><tr><th style="width:52mm">TSC Lua feature (guide/ Part 5)</th><th style="width:30mm">TF3?</th><th>How, or why not</th></tr></thead>
+<tbody>
+<tr><td>Pass-through <code>OnControlValueChange</code></td><td>n/a</td><td>No controls, no player input on vehicles.</td></tr>
+<tr><td>Read speed, curvature, gradient</td><td>partly</td><td><code>currentInfo.vehicle</code> gives speed/power/acceleration; no curvature or gradient field is listed <span class="pill u">check</span>.</td></tr>
+<tr><td>Write a control (virtual throttle)</td><td>no</td><td>Simulation state is read-only in transformators.</td></tr>
+<tr><td>Play / scrub an animation</td><td>yes</td><td><code>addAnimationState</code> / <code>triggerAnimation</code>.</td></tr>
+<tr><td>Show / hide a node (<code>ActivateNode</code>)</td><td>yes</td><td>Default parts on/off events, or a 1-key “on”/“off” animation you trigger.</td></tr>
+<tr><td>Emitter rate / colour</td><td>yes</td><td><code>updateParticleSystemFn</code> setters.</td></tr>
+<tr><td>Lights on/off, colour</td><td>partly</td><td>Lights are metadata with fixed properties; switch the mesh/light's parent node via parts events <span class="pill u">check</span> whether light sources follow hidden nodes.</td></tr>
+<tr><td>Alerts / messages</td><td>no</td><td>No UI access from transformators.</td></tr>
+<tr><td>Consist messages</td><td>partly</td><td><code>currentInfo.vehicle</code> includes “info about the configuration of the whole consist” <span class="pill v">manual</span>; the position events cover the common cases.</td></tr>
+<tr><td>Thermal damage, brake fade, flat spots</td><td>no (gameplay)</td><td>Only a visual could be faked (smoke, sparks via emitters). TF3 has its own maintenance/aging model (the Age slider in the Model Editor drives dirt and rust).</td></tr>
+<tr><td>Voltage zones</td><td>no</td><td>Electrification is a track property; vehicles declare ELECTRIC_TRAIN and the game enforces it.</td></tr>
+</tbody></table>
+
+<h1>7 · Case: trolley poles in TF3</h1>
+<figure>
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="340" height="130" rx="7" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="20" y="40" font-weight="bold">TSC (guide/ Part 5): gameplay</text>
+  <text x="20" y="60">hoist / seat / fall state machine</text><text x="20" y="76">risk roll from curvature × speed</text><text x="20" y="92">dewire cuts PantographControl → no traction</text><text x="20" y="108">route wire-height presets, keys [ ] P Alt+P</text><text x="20" y="124">alerts, sound pulses</text>
+  <rect x="370" y="20" width="340" height="130" rx="7" fill="#f1e9f8" stroke="#8a4fb8"/>
+  <text x="380" y="40" font-weight="bold">TF3: visual only</text>
+  <text x="380" y="60">pole_front / pole_rear instances, raised + stowed</text><text x="380" y="76">trailing pole up: back_forward_parts_on (front pole: _backward_)</text><text x="380" y="92">optional transformator: scrub "pole_raise" with speed</text><text x="380" y="108">wire height: one pose per route is impossible → pick one</text><text x="380" y="124">no dewire, no power cut, no keys</text>
+</svg>
+<figcaption><b>Figure 5.2 · The same model, two different jobs.</b> In TF3 the pole is a cosmetic that must always look right, so default to the robust mesh-swap and
+reserve the transformator for a smooth raise in depots.</figcaption>
+</figure>
+<p>What does carry across is the <b>model</b>: the TSC <code>TrolleyPole.lua</code> assumes frames 0–100 on <code>poleFront</code>/<code>poleRear</code>; the same two actions, pushed to strips, are
+the TF3 <code>pole_raise</code> animations. The TSC design's 65/72/78/92 wire-height frames become fixed “raised” poses per route mod.</p>
+
+<h1>8 · Mod parameters and game scripts</h1>
+<p>Mod-level Lua (<code>mod.lua</code>, parameters shown in the mod menu) and game scripts (gameplay, GUI, missions) exist in TF3 but their pages were not supplied and are not vehicle-specific.
+The API index lists <code>api.cmd</code>, <code>api.engine</code>, <code>api.gui</code>, <code>api.res</code>, <code>api.type</code>; the manual recommends the in-game console and <code>debugPrint(table)</code> for exploring.
+<span class="pill v">manual</span> If you want the Texas Electric gameplay (dewires, thermal damage) in TF3, it would have to be a game script acting on the whole simulation, which is a different project.</p>
+
+<h1>9 · Pitfalls</h1>
+<table>
+<thead><tr><th style="width:58mm">Pitfall</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Calling <code>api.res</code>/<code>api.engine</code> inside a transformator</td><td>Not allowed; only <code>api.type</code>. Use <code>modelEmitter:getModelId</code> for model ids. <span class="pill v">manual</span></td></tr>
+<tr><td>Assuming <code>currentInfo.vehicle</code> exists</td><td>It may not (model used statically); check for nil. <span class="pill v">manual</span></td></tr>
+<tr><td>Dropping the default behaviour</td><td>A custom <code>updateFn</code> replaces the default; call the <code>transformator_util</code> helpers first or doors stop working. <span class="pill v">manual</span></td></tr>
+<tr><td>Emitting a model not returned by <code>getEmittableModelsFn</code></td><td>Not possible; list it there first. <span class="pill v">manual</span></td></tr>
+<tr><td>Heavy per-frame work</td><td>Runs for every vehicle in view; precompute, keep it small. <span class="pill v">manual</span></td></tr>
+<tr><td>Expecting gameplay effects</td><td>Transformators draw; they do not drive.</td></tr>
+</tbody></table>
+
+</body></html>

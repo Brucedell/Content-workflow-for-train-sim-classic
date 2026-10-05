@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 7 — The Branch Tooling</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 7</div>
+    <h1>The branch tooling: one scene, two exports</h1>
+    <div class="sub">The TF3 Export Prep add-on turns the TSC-structured scene into the FBX set the Model Editor wants, on a temporary copy, in one click. This part
+      documents it, the naming map it applies, the texture-packing helper, and further scripts worth writing.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>What the add-on does and does not touch</li>
+    <li>Installing and the panel</li>
+    <li>Tags it reads</li>
+    <li>What happens on export (step by step)</li>
+    <li>The .import.lua it writes</li>
+    <li>The texture channel packer</li>
+    <li>Test results</li>
+    <li>Further scripts worth building (concepts)</li>
+    <li>The daily loop with both targets</li>
+  </ol></div>
+  <div class="foot">Files: <code>tools/blender/tf3_export_prep.py</code> (Blender 4.2+ add-on, shares the TSC sidebar tab), <code>tools/tf3_pack_mga.py</code> (Python 3 + Pillow).
+  The add-on was exercised headless in Blender 4.2 on a synthetic locomotive and its FBX re-imported to verify names, hierarchy and orientation; it has not been run through the
+  real Model Editor here.</div>
+</section>
+
+<h1>1 · What the add-on does and does not touch</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="p7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <rect x="10" y="20" width="200" height="190" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="20" y="40" font-weight="bold">Shared scene (untouched)</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9"><text x="20" y="60">1_0500_engine</text><text x="20" y="74">  2_1200_engine</text><text x="20" y="88">  1_0400_shadow_engine</text><text x="20" y="102">1_0500_bo01 / bo01wh01..03</text><text x="20" y="116">1_0500_bo02 / bo02wh01..03</text><text x="20" y="130">1_0128_panto01_part01 (action)</text><text x="20" y="144">tsc_driver, tsc_coupling_*</text><text x="20" y="158">emitter_smoke_dark</text></g>
+  <text x="20" y="186" fill="#5b6676">only change: tagged actions are</text><text x="20" y="200" fill="#5b6676">pushed into NLA strips once</text>
+  <rect x="260" y="20" width="200" height="190" rx="7" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="270" y="40" font-weight="bold">Temporary copy per LOD</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9"><text x="270" y="60">body</text><text x="270" y="74">bogie_front / w1 w2 w3</text><text x="270" y="88">bogie_rear  / w4 w5 w6</text><text x="270" y="102">panto01_part01 [strip]</text><text x="270" y="116">seat_driver|seat_crew_…</text><text x="270" y="130">emitter_smoke_dark#tf3</text><text x="270" y="144">bbox|bounding_box</text><text x="270" y="158">Body|phys_nrml_map_cblend</text></g>
+  <text x="270" y="186" fill="#5b6676">rotated −90° about Z,</text><text x="270" y="200" fill="#5b6676">deleted after export</text>
+  <rect x="510" y="20" width="200" height="190" rx="7" fill="#fff" stroke="#4a2c5e" stroke-width="1.5"/>
+  <text x="520" y="40" font-weight="bold">vehicle-train-myloco/</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9"><text x="520" y="60">myloco_lod0.fbx</text><text x="520" y="74">myloco_lod1.fbx</text><text x="520" y="88">myloco.import.lua</text><text x="520" y="102">tf3_name_map.json</text></g>
+  <text x="520" y="130" fill="#5b6676">drag the .import.lua, then</text><text x="520" y="144" fill="#5b6676">the folder, onto the Model Editor</text>
+  <g stroke="#4a2c5e" stroke-width="1.8" marker-end="url(#p7)"><line x1="210" y1="115" x2="258" y2="115"/><line x1="460" y1="115" x2="508" y2="115"/></g>
+</svg>
+<figcaption><b>Figure 7.1 · Three stages of one click.</b> Shadow meshes, number digits, light glow meshes, cab objects and coupler empties are skipped by default.</figcaption>
+</figure>
+
+<h1>2 · Installing and the panel</h1>
+<ol class="steps">
+<li>Edit ▸ Preferences ▸ Add-ons ▸ Install from Disk… ▸ <code>tools/blender/tf3_export_prep.py</code>. It appears in the <b>TSC</b> sidebar tab as the <b>TF3 branch</b> panel (install the TSC Toolkit too; its Validate is the pre-flight for both targets).</li>
+<li>Set <b>Export root</b> (a scratch folder or the mod's staging folder), <b>TF3 folder path</b> (<code>vehicle-train</code> or <code>vehicle-wagon</code>) and <b>Model name</b>.</li>
+<li>Fill the <b>Metadata seed</b>: engine type, power kW, tractive effort kN, top speed m/s, empty weight kg, years, reversible. These only populate the template; edit later in the Model Editor.</li>
+<li><b>Preview TF3 names</b> writes a text block showing every object's TF3 name per LOD and the skipped list. Fix tags until it reads right.</li>
+<li><b>Export TF3 FBX set</b>.</li>
+</ol>
+
+<h1>3 · Tags it reads</h1>
+<table>
+<thead><tr><th style="width:44mm">Custom property</th><th>On</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>tf3_name</code></td><td>Object</td><td>Use this node name instead of the automatic mapping.</td></tr>
+<tr><td><code>tf3_event</code></td><td>Object</td><td>Push the object's action into an NLA strip of this name (<code>wheels</code>, <code>drive</code>, <code>forever</code>, <code>open_doors_left</code>, <code>front_forward_parts_on</code> …). Done once; the TSC IA export still finds the animation via the strip.</td></tr>
+<tr><td><code>tf3_skip</code></td><td>Object</td><td>Exclude from TF3 (cab pick meshes, TSC-only detail).</td></tr>
+<tr><td><code>tf3_material</code></td><td>Material</td><td>Shortcode appended as <code>Name|shortcode</code> so the importer picks that material type.</td></tr>
+<tr><td>Empty <code>tsc_driver</code></td><td>–</td><td>Becomes <code>seat_driver|seat_crew_driving_upright</code>.</td></tr>
+<tr><td>Name contains <code>emitter</code></td><td>Empty</td><td>Kept as a particle emitter locator (TF3 reads it by name).</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">The TSC IA export is unaffected by NLA strips</span>
+<p>BRIAGE exports “the animation working in the Blender 3D view” (BRIAGE §8.5.1); an action in an NLA strip still plays in the viewport, so your <code>.ia</code> exports keep working after the push.
+If you prefer to keep actions active, duplicate the object into a TF3-only collection and tag only the duplicate.</p></div>
+
+<h1>4 · What happens on export (step by step)</h1>
+<ol class="steps">
+<li>Collect LOD levels from object names (<code>1_</code>, <code>2_</code>…; no prefix = LOD&nbsp;1).</li>
+<li>Push tagged actions into NLA strips named after their event (skipped if already present).</li>
+<li>For each LOD: duplicate the LOD's meshes, plus empties and lights (so seats and emitters exist in every LOD), into a temporary collection; LOD-n objects take the place of their LOD-1 twins in the hierarchy.</li>
+<li>Rename: wheels <code>w1…wN</code> ordered front to back by position; bogies <code>bogie_front</code>/<code>bogie_rear</code>; body <code>body</code>; others lose the prefix. If a name is already taken in the file, the copy is named <code>name#tf3</code> (the importer drops <code>#…</code>). Mesh datablocks are renamed the same so <code>.msh</code> files get clean names.</li>
+<li>Materials: one copy per original material renamed <code>Name|shortcode</code> when <code>tf3_material</code> is set.</li>
+<li>Rotate every root copy −90° about Z so +Y becomes +X. Children follow.</li>
+<li>LOD&nbsp;0 only: add a <code>bbox|bounding_box</code> cube around the meshes.</li>
+<li>Export FBX: selection only, X forward / Z up, scale applied, mesh + empty + light, NLA strips baked (LOD&nbsp;0 only), no leaf bones, textures not embedded.</li>
+<li>Delete the temporary collection and its data; write <code>&lt;name&gt;.import.lua</code> and <code>tf3_name_map.json</code>; log to the text block <b>TF3_Export</b>.</li>
+</ol>
+
+<h1>5 · The .import.lua it writes</h1>
+<pre>fbxLoader = {
+  predictMaterial = function(params) return nil end,          <span class="c">-- shortcodes in material names decide</span>
+  overrideProperties = function(params) return params.properties end,
+  getMetadataMap = function()
+    return {
+      availability = { yearFrom = 1950, yearTo = 0 },
+      description = { name = _("VEHICLE_SAMPLE_ELECTRIC_NAME"), description = _("VEHICLE_SAMPLE_ELECTRIC_DESCRIPTION") },
+      emissions = { noise = { score = -1 }, pollution = { score = -1 } },
+      landVehicle = { engines = { { power = 6600.0, tractiveEffort = 300.0, type = "ELECTRIC" } },
+                      topSpeed = 64.8, weightEmpty = 84000.0, weightMaxPayload = 0, friction = 0.02, brakeDeceleration = 2.5 },
+      railVehicle = { config = { axles = { "w1", "w2", "w3", "w4", "w5", "w6" }, fakeBogies = { { }, { } } } },
+      transportVehicle = { carrier = "RAIL", transportModes = { "TRAIN", "ELECTRIC_TRAIN" }, engineTransportModes = { "ELECTRIC_TRAIN" },
+                           compartmentsList = { }, loadSpeed = -1, comfortFactor = -1, arrivalDelay = 2000, departureDelay = 2000,
+                           reversible = false, filterTags = { "default" } },
+      seatProvider = { drivingLicense = "RAIL", crewModels = { }, seats = { } },
+      soundConfig = { soundSet = { name = "::/vehicle/train/shared/sound/train_electric.snd" } },
+    }
+  end,
+}</pre>
+<p class="small">Generated from the test scene. The three-function shape is the manual's <span class="pill v">manual</span>; the sound set path and <code>cost</code> field are placeholders <span class="pill u">check</span>.
+The axle list comes straight from the name map, so it cannot disagree with the FBX.</p>
+
+<h1>6 · The texture channel packer</h1>
+<pre>python tools/tf3_pack_mga.py --metal body_metal.png --gloss body_gloss.png --ao body_ao.png --out body_mga.tga
+python tools/tf3_pack_mga.py --from-tsc-spec body_spec.png --ao body_ao.png --out body_mga.tga   <span class="c"># spec → gloss, metal = 0</span></pre>
+<p>Packs greyscale maps into the R (metal), G (gloss), B (AO) channels of a <code>_mga</code> texture <span class="pill u">check</span> channel order against the .mtl page. With <code>--from-tsc-spec</code>
+it uses a TSC specular map as the gloss channel and a constant metalness. Requires Pillow (<code>pip install pillow</code>).</p>
+
+<h1>7 · Test results</h1>
+<p>Headless Blender 4.2, synthetic loco built to the Kuju sample's dimensions (body, two three-axle bogies, LOD-2 body, shadow mesh, pantograph with an action tagged
+<code>forward_parts_on</code>, driver empty, smoke emitter empty, coupler empty):</p>
+<pre>LOD 1 -> _lod0.fbx
+  1_0500_engine -> body        1_0500_bo01 -> bogie_front      1_0500_bo01wh01 -> w1 … 1_0500_bo02wh03 -> w6
+  1_0128_panto01_part01 -> panto01_part01 [event forward_parts_on]
+  tsc_driver -> seat_driver|seat_crew_driving_upright      emitter_smoke_dark -> emitter_smoke_dark
+LOD 2 -> _lod1.fbx      2_1200_engine -> body (+ empties)
+skipped (TSC-only): 1_0400_shadow_engine
+re-imported _lod0.fbx:  body (0,0,0) · bogie_front (5.58, 0, 0.27) · bogie_rear (−5.58, 0, 0.27)
+                        w1 (7.80, 0, 0.52) … w6 (−7.79, 0, 0.52), parented to their bogies
+                        seat at (6.90, 0.40, 0.86) · materials all "Body|phys_nrml_map_cblend"
+scene after export: unchanged object list; pantograph action now in NLA track "forward_parts_on"</pre>
+<p>Positions confirm the rotation (TSC +Y 5.583 → TF3 +X 5.58), the front-to-back axle numbering and the preserved parenting.</p>
+
+<h1>8 · Further scripts worth building (concepts)</h1>
+<table>
+<thead><tr><th style="width:44mm">Idea</th><th>What it would do</th><th style="width:30mm">Friction removed</th></tr></thead>
+<tbody>
+<tr><td>Metadata from the TSC blueprint</td><td>Parse the TSC engine/sim XML (the <code>tsc_crosscheck</code> code already does) and fill the <code>.import.lua</code> seed: power, TE, speed, mass, engine type, years. Zero re-typing.</td><td>Two physics forms</td></tr>
+<tr><td>Parts-event instancer</td><td>For objects tagged <code>tf3_parts = "front"</code>, create raised/lowered or lit/unlit duplicates with the right <code>…_parts_on/off</code> one-key animations automatically.</td><td>Hand-made on/off pairs</td></tr>
+<tr><td>Seat row generator</td><td>Place <code>|seat_sitting</code> empties on a grid inside a coach from pitch and width parameters.</td><td>Dozens of empties</td></tr>
+<tr><td>Label placer</td><td>Make the two nested <code>|label</code> empties from a selected rectangle face.</td><td>Fiddly locator pairs</td></tr>
+<tr><td>Model Editor bulk file</td><td>Write the <code>Scene;/ModRefName;/Path;</code> text file for a whole train set so one drag imports everything.</td><td>Many drags</td></tr>
+<tr><td>.mdl diff</td><td>After import, parse the saved <code>.mdl</code> (Lua table) and compare node names/transforms against <code>tf3_name_map.json</code> and the scene, like <code>tsc_crosscheck</code> does for TSC.</td><td>“What did the importer do?”</td></tr>
+<tr><td>Texture converter</td><td>TSC diffuse + spec → <code>_albo</code>, <code>_mga</code>, flat <code>_nrm</code>, blank <code>_cdr</code> with a livery mask stub.</td><td>PBR conversion</td></tr>
+</tbody></table>
+
+<h1>9 · The daily loop with both targets</h1>
+<ol class="steps">
+<li>Model and animate in the shared scene with TSC names; add the three TF3 habits (axles as objects, driver empty, independent actions).</li>
+<li>TSC toolkit <b>Validate</b>.</li>
+<li>TSC: BRIAGE IGS/IA → Measure + Patch → BPE2 → crosscheck → game (TSC guide Part&nbsp;7).</li>
+<li>TF3: <b>Preview TF3 names</b> → <b>Export TF3 FBX set</b> → drag <code>.import.lua</code>, drag folder → Model Editor validate → preview → game (this guide Part&nbsp;6).</li>
+<li>A change to the model goes through both lanes; a change to physics or metadata stays in its own lane.</li>
+</ol>
+
+</body></html>

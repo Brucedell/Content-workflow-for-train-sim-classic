@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 2 — Preparing the Shared Model for TF3</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 2</div>
+    <h1>Preparing the shared Blender model for TF3</h1>
+    <div class="sub">What to add to, remove from and rename in the TSC-structured scene so the Model Editor imports it cleanly: axes, origins, node and
+      material names, LOD files, PBR textures, locators. Nothing here breaks the TSC export.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Three habits that make the model dual-target</li>
+    <li>Axes and the rotation at the branch</li>
+    <li>Node names: the TSC → TF3 map</li>
+    <li>LODs: from name prefixes to files</li>
+    <li>Bogies, axles and the origin rules</li>
+    <li>Materials and the shortcode tag</li>
+    <li>Textures: diffuse/spec → PBR</li>
+    <li>Locators: seats, emitters, lights, bounding box, labels</li>
+    <li>What to leave out</li>
+    <li>Export checklist</li>
+  </ol></div>
+  <div class="foot">Import rules are from the Model Editor page (“FBX Model Import”, “Nodes / Meshes”, “Materials”, “Textures”, “Metadata”).
+  The automatic mapping described is what <code>tools/blender/tf3_export_prep.py</code> performs.</div>
+</section>
+
+<h1>1 · Three habits that make the model dual-target</h1>
+<ol class="steps">
+<li><b>Every moving or physically meaningful part is its own object with its origin on its axis.</b> TSC merges static parts anyway; TF3 needs axles as separate nodes
+(“the origin should be aligned in the center in terms of the x and z axis. Otherwise the axle will wobble ingame”). <span class="pill v">manual</span> Wheels modelled as one
+mesh per bogie look fine in TSC and are unusable in TF3.</li>
+<li><b>Keep the TSC naming as master, and never rely on Blender suffixes.</b> The TF3 importer strips <code>#…</code>, and the add-on turns <code>1_0500_bo01wh02</code> into
+<code>w2</code>; a stray <code>.001</code> would become part of a TSC node name and a TF3 mesh file name.</li>
+<li><b>Place a driver empty (<code>tsc_driver</code>) and keep the pantograph, doors and wipers as independent actions.</b> TSC uses the empty for <code>DriverPosition</code>;
+TF3 turns it into a crew seat locator. Independent actions become TSC <code>.ia</code> files and TF3 event strips without re-keying.</li>
+</ol>
+
+<h1>2 · Axes and the rotation at the branch</h1>
+<div class="two">
+<div>
+<figure>
+<svg viewBox="0 0 330 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="10">
+  <defs><marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+  <text x="80" y="18" text-anchor="middle" font-weight="bold">Shared scene (TSC)</text>
+  <g stroke-width="2.2"><line x1="80" y1="130" x2="80" y2="50" stroke="#177a6e" marker-end="url(#ax)"/><line x1="80" y1="130" x2="150" y2="105" stroke="#1f6fb2" marker-end="url(#ax)"/><line x1="80" y1="130" x2="25" y2="160" stroke="#b3261e" marker-end="url(#ax)"/></g>
+  <text x="86" y="52" fill="#177a6e" font-weight="bold">Z</text><text x="140" y="98" fill="#1f6fb2" font-weight="bold">+Y front</text><text x="12" y="178" fill="#b3261e" font-weight="bold">X</text>
+  <text x="250" y="18" text-anchor="middle" font-weight="bold">TF3 copy</text>
+  <g stroke-width="2.2"><line x1="250" y1="130" x2="250" y2="50" stroke="#177a6e" marker-end="url(#ax)"/><line x1="250" y1="130" x2="320" y2="160" stroke="#b3261e" marker-end="url(#ax)"/><line x1="250" y1="130" x2="195" y2="105" stroke="#1f6fb2" marker-end="url(#ax)"/></g>
+  <text x="256" y="52" fill="#177a6e" font-weight="bold">Z</text><text x="286" y="178" fill="#b3261e" font-weight="bold">+X front</text><text x="176" y="98" fill="#1f6fb2" font-weight="bold">Y left</text>
+  <rect x="20" y="192" width="290" height="30" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/>
+  <text x="165" y="211" text-anchor="middle" font-family="DejaVu Sans Mono, monospace">rotate −90° about Z, then FBX with X fwd / Z up</text>
+</svg>
+<figcaption><b>Figure 2.1 · The one geometric change at the branch.</b> TF3 measures positions “along the lane” on x and places seats at x = ±8.5 on a loco
+<span class="pill v">manual</span>, so the front must point along +X. The add-on applies the rotation to the temporary copy only.</figcaption>
+</figure>
+</div>
+<div>
+<ul>
+<li>Export FBX with <b>Forward = X, Up = Z</b> and tick <b>Use Blender Coordinate System</b> in the Model Editor's Im-/Export options. <span class="pill v">manual</span></li>
+<li>Scale: metres in both games. Apply scale before export (TSC rule; FBX exports with <code>apply_scale_options = FBX_SCALE_ALL</code>).</li>
+<li>Origin: the vehicle centre on the rail head in both games. <span class="pill u">check</span> that TF3's ground plane (“gray ground face at height 0” in the Model Editor) is the rail head for rail vehicles, not the sleeper top.</li>
+<li>Axle rotation axis: TF3 spins axles about their local <b>y</b> axis. After the −90° rotation, the TSC wheel objects (which spin about Blender X) rotate about TF3 y. The add-on rotates whole root objects, so children keep their relative orientation.</li>
+</ul>
+</div>
+</div>
+
+<h1>3 · Node names: the TSC → TF3 map</h1>
+<table>
+<thead><tr><th style="width:52mm">TSC object</th><th style="width:40mm">TF3 node</th><th>Rule</th></tr></thead>
+<tbody>
+<tr><td><code>1_0500_engine</code> (main body)</td><td><code>body</code></td><td>Base names <code>engine</code>, <code>wagon</code>, <code>coach</code>, <code>body</code>, <code>vehicle</code> → <code>body</code>.</td></tr>
+<tr><td><code>1_0500_bo01</code> / <code>bo02</code></td><td><code>bogie_front</code> / <code>bogie_rear</code></td><td>Any node holding axle nodes is a bogie; the name is free. <span class="pill v">manual</span></td></tr>
+<tr><td><code>1_0500_bo01wh01</code> … <code>bo02wh03</code></td><td><code>w1</code> … <code>w6</code></td><td>Numbered front to back by position; listed in <code>railVehicle.config.axles</code>.</td></tr>
+<tr><td><code>2_1200_engine</code> (LOD twin)</td><td><code>body</code> in <code>…_lod1.fbx</code></td><td>Same node name, next LOD file.</td></tr>
+<tr><td><code>1_0128_panto01_part01..03</code></td><td><code>panto01_part01..03</code></td><td>Prefix stripped; chain kept; animation becomes an event strip (Part&nbsp;3).</td></tr>
+<tr><td><code>1_0064_wiper01_l</code></td><td><code>wiper01_l</code></td><td>Prefix stripped.</td></tr>
+<tr><td><code>tsc_driver</code> (empty)</td><td><code>seat_driver|seat_crew_driving_upright</code></td><td>Imported as a crew seat. <span class="pill v">manual</span></td></tr>
+<tr><td><code>emitter_smoke_dark</code> (empty)</td><td>unchanged</td><td>“emitter” in the name → particle emitter; <code>smoke_dark</code> sets defaults; X scale = velocity. <span class="pill v">manual</span></td></tr>
+<tr><td>Any object with <code>tf3_name</code> property</td><td>that value</td><td>Manual override.</td></tr>
+<tr><td><code>1_0400_shadow_*</code>, <code>1_1000_primarydigits_*</code>, <code>1_1000_light_*</code>, cab objects, <code>tsc_coupling_*</code></td><td>(skipped)</td><td>No TF3 equivalent; see §9. Mark anything else with <code>tf3_skip</code>.</td></tr>
+</tbody></table>
+<div class="box"><span class="t">Why not name things the TF3 way from the start?</span>
+<p>Because TSC's keyword names (<code>bo01</code>, <code>bo01wh01</code>, <code>panto01</code>, <code>wiper01</code>) are what BRIAGE uses to keep parts un-merged and what the TSC bogie blueprint
+references. TF3 has no reserved names at all, so it is the flexible side. Keep the strict naming as master and generate the lax one.</p></div>
+
+<h1>4 · LODs: from name prefixes to files</h1>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+  <defs><marker id="l2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <rect x="10" y="20" width="250" height="110" rx="6" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="20" y="40" font-family="DejaVu Sans, Arial" font-weight="bold">TSC scene</text>
+  <text x="20" y="60">1_0500_engine</text><text x="32" y="76">└ 2_1200_engine</text><text x="20" y="96">1_0500_bo01</text><text x="32" y="112">└ 2_1200_bo01, 1_0500_bo01wh01 …</text>
+  <rect x="330" y="20" width="380" height="110" rx="6" fill="#f1e9f8" stroke="#8a4fb8"/>
+  <text x="340" y="40" font-family="DejaVu Sans, Arial" font-weight="bold">vehicle-train-myloco/</text>
+  <text x="340" y="60">myloco_lod0.fbx   body, bogie_front, w1…, panto…, seats</text>
+  <text x="340" y="80">myloco_lod1.fbx   body, bogie_front (LOD-2 meshes), + empties</text>
+  <text x="340" y="100">myloco.import.lua tf3_name_map.json</text>
+  <text x="340" y="122" font-family="DejaVu Sans, Arial" fill="#5b6676">_lod0 is mandatory; higher LODs optional; same folder</text>
+  <line x1="262" y1="75" x2="328" y2="75" stroke="#4a2c5e" stroke-width="2" marker-end="url(#l2)"/>
+</svg>
+<figcaption><b>Figure 2.2 · LOD split.</b> “Each .fbx file may contain the 3D model of one level of detail… <code>_lodX.fbx</code> ending, where X=0 is mandatory”
+<span class="pill v">manual</span>. The add-on puts each TSC LOD level into its own file and carries non-mesh objects (seats, emitters) into every LOD so the hierarchy
+exists there too.</figcaption>
+</figure>
+<ul>
+<li>Visible distances are set per LOD in the Model Editor (<code>visibleFrom</code>/<code>visibleTo</code>), not in names. <span class="pill v">manual</span> Your TSC distances (500, 1200) are a good starting point.</li>
+<li>A node that exists in LOD&nbsp;0 but not in LOD&nbsp;1 simply disappears at distance. Animated parts (doors, pantograph) usually need at least a crude LOD&nbsp;1 version; in TSC they often have none.</li>
+<li>Fake bogies must be listed once per LOD (<code>fakeBogies = { {…}, {…} }</code>) even if empty. <span class="pill v">manual</span></li>
+</ul>
+
+<h1>5 · Bogies, axles and the origin rules</h1>
+<table>
+<thead><tr><th style="width:40mm">Part</th><th>Origin</th><th>Parent</th><th style="width:44mm">TSC equivalent</th></tr></thead>
+<tbody>
+<tr><td>Axle (<code>w1</code>…)</td><td>Axle centre; centred in x and z of the wheelset; spins about local y. <span class="pill v">manual</span></td><td>Its bogie</td><td><code>bo01wh01</code>, radius typed into the bogie bp</td></tr>
+<tr><td>Bogie (<code>bogie_front</code>)</td><td>Midway between its axles, at pivot height; the game pivots here. <span class="pill v">manual</span></td><td><code>body</code></td><td><code>bo01</code>, pivot typed as <code>BogeyPivotX</code></td></tr>
+<tr><td>Body (<code>body</code>)</td><td>Vehicle centre on the rail.</td><td>RootNode</td><td><code>engine</code></td></tr>
+<tr><td>Single-truck car (streetcar)</td><td>One bogie node under <code>body</code>; add a <b>fake bogie</b> on <code>body</code> so there is a second alignment point.</td><td>–</td><td>One bogie at <code>BogeyPivotX = 0</code></td></tr>
+<tr><td>Steam coupled wheels</td><td>Each driving axle its own node under a frame node that is a child of <code>body</code>; rods driven by the <code>drive</code>/<code>wheels</code> events (Part&nbsp;3).</td><td>frame</td><td>TSC uses custom keywords to keep rods separate</td></tr>
+</tbody></table>
+<p>The TSC toolkit's <b>Validate</b> already checks wheel bottoms on Z&nbsp;=&nbsp;0 and bogie origins; both checks are exactly what TF3 needs, so run it before a TF3 export too.</p>
+
+<h1>6 · Materials and the shortcode tag</h1>
+<p>In the FBX, a material name is <code>&lt;materialname&gt;[|&lt;shortcode&gt;][#&lt;comment&gt;]</code>. The shortcode selects the TF3 material type; without it the importer
+predicts a type (or your <code>.import.lua</code>'s <code>predictMaterial</code> does). <span class="pill v">manual</span> Names starting with <code>/</code> reference existing materials
+(e.g. <code>::/vehicle/train/emissive/train_all_lights.mtl</code> for lights). <span class="pill v">manual</span></p>
+<table>
+<thead><tr><th style="width:44mm">TSC material (shader)</th><th style="width:60mm">TF3 material type (from manual names)</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Body, Underside — <code>TrainBasicObjectSpecular.fx</code></td><td>physical with normal map + colour blend (the manual names <code>phys_transparent_nrml_map_cblend.mat</code> and <code>::physical_nrml_map_op_uv1_ao_op_mask.mat.lua</code>)</td><td>Shortcode strings are in the material-type table not supplied <span class="pill u">check</span>. Set via material property <code>tf3_material</code>.</td></tr>
+<tr><td>Transparency — <code>Lit3DirSingle</code>, alpha blend</td><td>PHYS_TRANSPARENT (placeholder/glass)</td><td>Window glass.</td></tr>
+<tr><td>Lights — <code>UnlitSingle</code>, additive</td><td>reference <code>::/vehicle/train/emissive/train_all_lights.mtl</code></td><td>Reuse the base-game emissive material instead of making one. <span class="pill v">manual</span></td></tr>
+<tr><td>Number digits — <code>TrainDecal.fx</code></td><td>(drop) → TF3 labels</td><td>See §8.</td></tr>
+<tr><td><code>shadow_*</code> — <code>StencilShadow.fx</code></td><td>(drop)</td><td>TF3 computes shadows.</td></tr>
+</tbody></table>
+<p>Keep material <em>count</em> low here too: each group of a mesh with a different material becomes a sub-mesh, and “the number of submeshes needs to match the number of
+assigned materials” or the Model Editor patches and warns. <span class="pill v">manual</span></p>
+
+<h1>7 · Textures: diffuse/spec → PBR</h1>
+<p>The importer finds textures by the material name plus suffix, or by assignment in the FBX. <span class="pill v">manual</span></p>
+<table>
+<thead><tr><th style="width:40mm">Map</th><th style="width:36mm">Suffix</th><th>Content</th><th style="width:48mm">From the TSC set</th></tr></thead>
+<tbody>
+<tr><td><code>map_albedo</code> / <code>_opacity</code></td><td><code>_alb</code> / <code>_albo</code></td><td>Colour (+ alpha)</td><td>TSC diffuse, with baked shading removed</td></tr>
+<tr><td><code>map_normal</code></td><td><code>_nrm</code></td><td>Normal map</td><td>TSC normal if the shader had one, else bake or flat</td></tr>
+<tr><td><code>map_metal_gloss_ao</code></td><td><code>_mga</code></td><td>R metal, G gloss, B AO (TF2 convention <span class="pill u">check</span>)</td><td>TSC specular → gloss channel; AO from a bake</td></tr>
+<tr><td><code>map_cblend_dirt_rust</code></td><td><code>_cdr</code></td><td>Recolourable areas, dirt, rust masks</td><td>New: paint the livery mask</td></tr>
+<tr><td><code>map_lgt</code></td><td><code>_e</code></td><td>Emissive</td><td>TSC night textures</td></tr>
+<tr><td><code>map_ao</code></td><td><code>_uv1_ao</code></td><td>Lightmap AO on UV1</td><td>Optional</td></tr>
+</tbody></table>
+<ul>
+<li>Work in <code>.tga</code>; the Model Editor converts to <code>.dds</code> on save and the manual warns against basing work on lossy DDS. <span class="pill v">manual</span></li>
+<li>Power-of-two sizes, as in TSC. The TF3 budget pages were not supplied <span class="pill u">check</span>.</li>
+<li>Part&nbsp;7 includes a small channel-packing script to build <code>_mga</code> from separate metal/gloss/AO greyscale images.</li>
+</ul>
+
+<h1>8 · Locators: seats, emitters, lights, bounding box, labels</h1>
+<table>
+<thead><tr><th style="width:56mm">Blender object</th><th>What the importer does <span class="pill v">manual</span></th></tr></thead>
+<tbody>
+<tr><td>Empty <code>name|seat_&lt;anim&gt;</code> / <code>|seat_crew_&lt;anim&gt;</code></td><td>Seat with position/rotation/scale; anim ∈ idle, sitting, driving_upright, driving. Meshes on the node are removed.</td></tr>
+<tr><td>Empty with <code>emitter</code> in the name</td><td>Particle emitter; <code>particleId</code> = name before <code>#</code>; velocity from X scale; <code>smoke_dark</code>/<code>smoke_bright</code> set defaults.</td></tr>
+<tr><td>Blender light (Point, Spot, Sun)</td><td>Light source: colour, strength (Power × 100), angles; <code>childId</code> = parent node.</td></tr>
+<tr><td>Mesh <code>name|bounding_box</code></td><td>Its bounds become the model's bounding box; mesh removed. Also <code>|extent</code> (simulation extent) and <code>|collider_list</code> (box collider).</td></tr>
+<tr><td>Two nested empties <code>…|label</code></td><td>A text label rectangle (parent = bottom-left, child = top-right; same rotation, z forward). Replaces TSC's number digits.</td></tr>
+</tbody></table>
+<p>The add-on adds a <code>bbox|bounding_box</code> cube around the LOD-0 meshes automatically and converts <code>tsc_driver</code>; add seats for passengers and labels by hand (they
+have no TSC counterpart).</p>
+
+<h1>9 · What to leave out</h1>
+<ul>
+<li><b>Cab interior and pick meshes</b>: TF3 has no cab view. Keep them in a separate TSC scene or tag <code>tf3_skip</code>.</li>
+<li><b>Stencil shadow meshes</b> and the <b>collision IGS hull</b>: TF3 computes shadows and uses <code>|collider_list</code> instead.</li>
+<li><b>Number digit planes</b>: use labels.</li>
+<li><b>Coupler empties</b>: TF3 has no couplers to author; vehicle spacing comes from the bounding box / extent <span class="pill u">check</span>.</li>
+<li><b>Light glow meshes</b> can stay if you want visible lamps, re-materialled to the base-game emissive material and switched by the <code>…_parts_on/off</code> events.</li>
+</ul>
+
+<h1>10 · Export checklist</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Check</th><th style="width:40mm">Who catches it</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>TSC toolkit Validate passes (scale, origins, wheel contact, names)</td><td>TSC toolkit</td></tr>
+<tr><td>☐</td><td>Every axle is its own object under its bogie; bogie origin midway between axles</td><td>Validate + eye</td></tr>
+<tr><td>☐</td><td>Driver empty <code>tsc_driver</code> present; passenger seat empties if a coach</td><td>Preview TF3 names</td></tr>
+<tr><td>☐</td><td>Materials tagged <code>tf3_material</code>; textures named <code>&lt;material&gt;_alb/_nrm/_mga/_cdr</code> in the Textures folder</td><td>Model Editor validation</td></tr>
+<tr><td>☐</td><td>Animated parts tagged <code>tf3_event</code> with a valid event name (Part&nbsp;3)</td><td>Preview TF3 names</td></tr>
+<tr><td>☐</td><td>TSC-only objects skipped (<code>tf3_skip</code> or default list)</td><td>Preview TF3 names</td></tr>
+<tr><td>☐</td><td>Export root is inside the mod's staging folder or a scratch folder you drag onto the Model Editor</td><td>You</td></tr>
+</tbody></table>
+
+</body></html>

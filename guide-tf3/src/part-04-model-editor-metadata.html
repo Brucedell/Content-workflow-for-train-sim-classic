@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 4 — Model Editor and Metadata</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 4</div>
+    <h1>The Model Editor and the vehicle metadata</h1>
+    <div class="sub">The Model Editor is TF3's Blueprint Editor and asset previewer in one. This part walks through importing the FBX set, filling every metadata
+      struct a rail vehicle needs, validating, making icons, and the rail-specific extras: fake bogies, multiple units and buy-menu groups.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Set up and first start</li>
+    <li>Import: template first, then the FBX folder</li>
+    <li>The metadata structs, field by field</li>
+    <li>Compartments and seats</li>
+    <li>Fake bogies</li>
+    <li>Validation</li>
+    <li>Icons and screenshots</li>
+    <li>Multiple units and buy-menu groups</li>
+    <li>Repaints: the cheap second livery</li>
+    <li>Field reference: sample electric and 7F as TF3 vehicles</li>
+  </ol></div>
+  <div class="foot">Everything in this part is from the Model Editor, Vehicle Basics, Vehicle Types, Advanced Topics and Repaint Mods pages unless marked.</div>
+</section>
+
+<h1>1 · Set up and first start</h1>
+<ol class="steps">
+<li>Run <code>ModelEditor.bat</code> (Windows), <code>ModelEditor.sh</code> (Linux) or <code>ModelEditor.command</code> (macOS) from the game's installation folder. Two windows open: a console and the UI. <span class="pill v">manual</span></li>
+<li>On first start it writes a config file under <code>%APPDATA%/Transport Fever 3/</code> (or <code>~/.local/share/Transport Fever 3</code>, or <code>~/Library/Application Support/Transport Fever 3/</code>) and asks for the <b>userDataPath</b>. Find it in game: Settings ▸ Advanced ▸ Open user data folder. Use forward slashes only. <span class="pill v">manual</span></li>
+<li>Restart. The open dialog now browses the base game and every mod in the <b>staging area</b>. <span class="pill v">manual</span></li>
+<li>Options ▸ Im-/Export: tick <b>Use Blender Coordinate System</b>; decide the Overwrite… switches (meshes/animations/materials/textures) for re-imports. <span class="pill v">manual</span></li>
+<li>Options ▸ Config: set <b>Enable Auto Update</b> to <i>On Focus</i> if your paint program writes textures slowly (black textures otherwise). <span class="pill v">manual</span></li>
+</ol>
+
+<h1>2 · Import: template first, then the FBX folder</h1>
+<figure>
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <rect x="10" y="30" width="150" height="90" rx="6" fill="#f1e9f8" stroke="#8a4fb8"/><text x="20" y="50" font-weight="bold">1 · drag myloco.import.lua</text><text x="20" y="68">seeds predictMaterial,</text><text x="20" y="84">overrideProperties,</text><text x="20" y="100">getMetadataMap</text>
+  <rect x="190" y="30" width="170" height="90" rx="6" fill="#f1e9f8" stroke="#8a4fb8"/><text x="200" y="50" font-weight="bold">2 · drag the folder</text><text x="200" y="68">vehicle-train-myloco/</text><text x="200" y="84">→ content/vehicle/train/</text><text x="200" y="100">   myloco/myloco.mdl + msh/ mat/</text>
+  <rect x="390" y="30" width="150" height="90" rx="6" fill="#fff" stroke="#16324f"/><text x="400" y="50" font-weight="bold">3 · fix in editor</text><text x="400" y="68">Model: LOD distances,</text><text x="400" y="84">Materials: textures,</text><text x="400" y="100">Metadata: everything else</text>
+  <rect x="570" y="30" width="140" height="90" rx="6" fill="#4a2c5e"/><text x="580" y="50" font-weight="bold" fill="#fff">4 · Validate, Save</text><text x="580" y="68" fill="#e9d8f5">to the target mod</text><text x="580" y="84" fill="#e9d8f5">MODEL MESH</text><text x="580" y="100" fill="#e9d8f5">MATERIAL ANIMATION</text>
+  <g stroke="#4a2c5e" stroke-width="1.8" marker-end="url(#g4)"><line x1="160" y1="75" x2="188" y2="75"/><line x1="360" y1="75" x2="388" y2="75"/><line x1="540" y1="75" x2="568" y2="75"/></g>
+  <text x="360" y="150" text-anchor="middle" fill="#5b6676">Saving has no overwrite confirmation; the save dropdown lets you deselect MODEL / MESH / MATERIAL / ANIMATION.</text>
+</svg>
+<figcaption><b>Figure 4.1 · Import order</b> <span class="pill v">manual</span>. The <code>.import.lua</code> template is optional but is what lets you re-import the FBX a dozen times
+without re-typing metadata: its <code>getMetadataMap()</code> is applied “as is” to the models imported afterwards.</figcaption>
+</figure>
+<ul>
+<li>Folder name decides the content path: <code>vehicle-train-myloco/</code> → <code>vehicle/train/myloco/myloco.mdl</code>; use <code>+</code> instead of the last <code>-</code> to put several models in one folder (multiple units). <span class="pill v">manual</span></li>
+<li>Drag a single FBX for one LOD, the folder for all LODs. <span class="pill v">manual</span></li>
+<li>Bulk: drag a <code>.txt</code> with <code>ModRefName;&lt;modid&gt;</code> and <code>Path;…</code> lines to import many models. <span class="pill v">manual</span></li>
+<li>After import, the <b>Model</b> window shows the node tree with mesh references and material/animation counts; hover a line to isolate the mesh; double-click a name to copy it for metadata. <span class="pill v">manual</span></li>
+</ul>
+
+<h1>3 · The metadata structs, field by field</h1>
+<table>
+<thead><tr><th style="width:36mm">Struct</th><th>Fields (rail vehicle) <span class="pill v">manual</span></th><th style="width:44mm">From the TSC side</th></tr></thead>
+<tbody>
+<tr><td><code>transportVehicle</code></td><td><code>carrier</code> "RAIL" · <code>transportModes</code> {TRAIN, ELECTRIC_TRAIN} · <code>engineTransportModes</code> {ELECTRIC_TRAIN} (locos) · <code>compartmentsList</code> · <code>loadSpeed</code> · <code>comfortFactor</code> · <code>arrivalDelay</code>/<code>departureDelay</code> ms · <code>reversible</code> · <code>filterTags</code> {"default"} · <code>groupFileName</code> · <code>multipleUnitOnly</code></td><td>Electric subsystem → ELECTRIC_TRAIN; diesel/steam → TRAIN only. Delays from door animations.</td></tr>
+<tr><td><code>landVehicle</code></td><td><code>engines</code> { {power kW, tractiveEffort kN, type} } · <code>topSpeed</code> m/s · <code>weightEmpty</code> kg · <code>weightMaxPayload</code> kg · <code>friction</code> · <code>brakeDeceleration</code></td><td>Sim MaxPower/MaxForce/MaxSpeed, bp Mass (TF3 guide Part&nbsp;1 §6 conversions).</td></tr>
+<tr><td><code>railVehicle</code></td><td><code>config.axles</code> {node names} · <code>config.fakeBogies</code> {one list per LOD}</td><td>Axle names from the name map; usually <code>{ {}, {} }</code>.</td></tr>
+<tr><td><code>seatProvider</code></td><td><code>drivingLicense</code> "RAIL" · <code>crewModels</code> · <code>seats</code> { {animation, crew, forward, group, transf} }</td><td>Driver empty becomes the crew seat on import.</td></tr>
+<tr><td><code>soundConfig</code></td><td><code>soundSet.name</code> (path to .snd relative to the .mdl) · <code>effects</code> { event = file }</td><td>Pick a base-game set <span class="pill u">check</span> paths.</td></tr>
+<tr><td><code>emissions</code></td><td><code>noise</code> / <code>pollution</code>: <code>score</code> 0–100 or −1 (auto), or explicit idle/speed/power</td><td>Balance against power.</td></tr>
+<tr><td><code>availability</code></td><td><code>yearFrom</code>, <code>yearTo</code> (0 = open end)</td><td>Prototype years.</td></tr>
+<tr><td><code>description</code></td><td><code>name</code>, <code>description</code> as <code>_("KEY")</code> → <code>strings.json</code></td><td>Engine name.</td></tr>
+<tr><td><code>cost</code></td><td><code>price</code> (−1 for auto <span class="pill u">check</span>)</td><td>–</td></tr>
+<tr><td><code>colorConfig</code></td><td><code>configs</code> { { {r,g,b} }, … } for colour-blend materials</td><td>Liveries.</td></tr>
+<tr><td><code>transformatorConfig</code></td><td>reference to a <code>.trf.lua</code> + <code>params</code></td><td>Only for custom logic (Part&nbsp;5).</td></tr>
+</tbody></table>
+<p>The Metadata window's <b>+</b> button adds structs; the gear offers templates; <kbd>Shift</kbd>-click an arrow to unfold a whole property. <span class="pill v">manual</span></p>
+
+<h1>4 · Compartments and seats</h1>
+<pre>compartmentsList = {
+  { loadConfigs = {
+      { cargoEntry = { capacity = 80,
+          cargoTypeSet = { cargoClassesIncluded = { "PASSENGERS" }, cargoClassesExcluded = {},
+                           cargoTypesIncluded = {}, cargoTypesExcluded = {} },
+          loadIndicator = "", seats = {} },
+        toHide = {} },
+  } },
+},</pre>
+<ul>
+<li>One compartment is usually enough; several load configs when the same space can carry different cargo splits (coal only, or coal + ore). <span class="pill v">manual</span></li>
+<li>A locomotive normally has an empty <code>compartmentsList = {}</code> and a crew seat; a coach has passenger capacity and passenger seats; a wagon has a cargo class and, for visible loads, a <code>loadIndicator</code> with a <code>cargoBay</code> on a node. <span class="pill v">manual</span></li>
+<li>Seats: place <code>|seat_sitting</code> empties in Blender for passengers (the import brings them in), or add them in the editor with the <b>Seat Locators</b> render option on. <span class="pill v">manual</span></li>
+</ul>
+
+<h1>5 · Fake bogies</h1>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <line x1="40" y1="110" x2="680" y2="110" stroke="#1b2330" stroke-width="2.5"/>
+  <rect x="160" y="50" width="400" height="40" rx="5" fill="#e9d8f5" stroke="#4a2c5e" stroke-width="1.5"/><text x="360" y="75" text-anchor="middle" font-weight="bold">body (single-truck streetcar)</text>
+  <rect x="320" y="92" width="80" height="12" rx="3" fill="#8a96a6"/><circle cx="335" cy="104" r="8" fill="#fff" stroke="#16324f" stroke-width="1.5"/><circle cx="385" cy="104" r="8" fill="#fff" stroke="#16324f" stroke-width="1.5"/>
+  <circle cx="360" cy="98" r="4.5" fill="#8a4fb8"/><text x="366" y="130" fill="#8a4fb8">real bogie pivot (origin)</text>
+  <circle cx="520" cy="110" r="4.5" fill="#1f6fb2"/><text x="470" y="40" fill="#1f6fb2">position = 4.0 (tangent point on the lane)</text>
+  <circle cx="520" cy="98" r="4.5" fill="#b3261e"/><text x="530" y="98" fill="#b3261e">offset → pivot</text>
+  <line x1="360" y1="98" x2="520" y2="98" stroke="#b3261e" stroke-dasharray="4 3"/>
+</svg>
+<figcaption><b>Figure 4.2 · A fake bogie gives a one-bogie body its second alignment point</b> <span class="pill v">manual</span>. <code>group</code> = node, <code>position</code> = distance along the
+lane from the root (positive = front), <code>offset</code> = shift along the tangent at that point, <code>upright</code> optional. Up to two per node; listed per LOD.</figcaption>
+</figure>
+<pre>railVehicle = { config = { axles = { "w1", "w2" },
+  fakeBogies = { { { group = "body", offset = 0, position = 4.0, upright = false } },   <span class="c">-- LOD 0</span>
+                 { { group = "body", offset = 0, position = 4.0, upright = false } } } } }  <span class="c">-- LOD 1</span></pre>
+<p>Validation fails if the list length differs from the LOD count (“size (= 2) must match number of lods (= 3) or be empty”). <span class="pill v">manual</span></p>
+
+<h1>6 · Validation</h1>
+<p>The top-bar validate button checks metadata and reports one issue at a time; run it again after each fix. <span class="pill v">manual</span> Messages you will meet on a rail vehicle:</p>
+<table>
+<thead><tr><th style="width:62mm">Message <span class="pill v">manual</span></th><th>Meaning / fix</th></tr></thead>
+<tbody>
+<tr><td><code>railVehicle/configs/fakeBogies: size (= 2) must match number of lods (= 3) or be empty</code></td><td>One fakeBogies list per LOD, even <code>{}</code>.</td></tr>
+<tr><td><code>Referenced mesh node 'XYZ' not found (key: 'seatProvider.seats[10]')</code></td><td>Seat <code>group</code> names a node that does not exist (renamed? LOD?).</td></tr>
+<tr><td><code>transportVehicle/loadConfigs: list of load configs must not be empty</code></td><td>Every compartment needs at least one load config.</td></tr>
+<tr><td><code>Group 'body' has 2 materials but mesh has 3 groups</code></td><td>Material count per node must equal the mesh's material groups; fix slots in Blender.</td></tr>
+<tr><td><code>Used technique … requires missing mesh attribute … UV1</code></td><td>Material type needs a second UV set (AO) the mesh lacks; change type or add UV1.</td></tr>
+<tr><td><code>map_albedo has missing texture</code></td><td>Texture path wrong or file not yet converted.</td></tr>
+<tr><td><code>Animation … has keyframes starting after 0</code></td><td>Key frame 0.</td></tr>
+<tr><td><code>Model Group 'body' uses skinned mesh with an unskinned material</code></td><td>Vertex groups on a mesh that should be rigid: remove them or use a Skin material.</td></tr>
+</tbody></table>
+
+<h1>7 · Icons and screenshots</h1>
+<p>Press <b>SCREENSHOT</b>: it generates the three UI icons (<code>_store</code>, <code>_small_icon</code>, <code>_icon20</code>) and moves them into the mod, plus orthographic and perspective
+renders in <code>screenshots/</code> under the user data path. The game needs <code>.tga</code>. Options ▸ Icons sets the stage track model, sizes, pixels per metre and which outputs to
+generate; Bulk Generate does a whole folder. <span class="pill v">manual</span></p>
+
+<h1>8 · Multiple units and buy-menu groups</h1>
+<div class="two">
+<div>
+<pre><span class="c">-- myunit.mu.lua, next to the .mdl files</span>
+function data() return {
+  vehicles = {
+    { name = "myloco.mdl",   forward = true },
+    { name = "mycoach.mdl",  forward = true },
+    { name = "myloco.mdl",   forward = false },  <span class="c">-- flipped 180°</span>
+  },
+  name = _("VEHICLE_MU_MYUNIT_NAME"),
+  desc = _("VEHICLE_MU_MYUNIT_DESCRIPTION"),
+  filterTags = { "default" },
+  groupFileName = "",
+} end</pre>
+<p class="small">All parts must be within their availability years for the unit to appear. <span class="pill v">manual</span></p>
+</div>
+<div>
+<h3>Groups</h3>
+<p>Set <code>transportVehicle.groupFileName = "menu_myloco.mdl"</code> (relative path) on each variant to group liveries or lengths under one store entry. For a custom group icon,
+make a placeholder model with <code>multipleUnitOnly = true</code> and no <code>groupFileName</code>; it is never sold, only shown as the parent. Icon style: up to four variants, 30&nbsp;px apart,
+≤ 327&nbsp;px wide. <span class="pill v">manual</span></p>
+</div>
+</div>
+
+<h1>9 · Repaints: the cheap second livery</h1>
+<p>A repaint mod changes only textures: new <code>.mtl</code> per re-textured material (<code>map_albedo_opacity</code>, <code>map_normal</code>, <code>map_metal_gloss_ao</code>, <code>map_cblend_dirt_rust</code>), a new
+<code>.mdl</code> per variant whose material references point at them in every LOD, new UI icons, new textures, a different modId and the original mod as dependency.
+<span class="pill v">manual</span> This is how your TSC liveries become TF3 variants without touching the meshes.</p>
+
+<h1>10 · Field reference: the two sample vehicles as TF3 metadata</h1>
+<table>
+<thead><tr><th style="width:44mm">Field</th><th>Sample Electric Engine</th><th>Example Steam Engine (SDJR 7F)</th></tr></thead>
+<tbody>
+<tr><td><code>landVehicle.engines</code></td><td>{ power = 6600, tractiveEffort = 300, type = "ELECTRIC" } (if TSC values are kW/kN <span class="pill u">check</span>)</td><td>{ power = 990, tractiveEffort = 157, type = "STEAM" } (1328 hp × 0.7457; 35.296 klbf × 4.448)</td></tr>
+<tr><td><code>landVehicle.topSpeed</code></td><td>64.8 (145 mph)</td><td>26.8 (60 mph)</td></tr>
+<tr><td><code>landVehicle.weightEmpty</code></td><td>84000</td><td>68000 (+ tender as a separate vehicle)</td></tr>
+<tr><td><code>railVehicle.config.axles</code></td><td>{ "w1","w2","w3","w4","w5","w6" }</td><td>pony truck axle + 4 coupled axles; rods under <code>drive</code></td></tr>
+<tr><td><code>transportVehicle.transportModes</code></td><td>{ "TRAIN", "ELECTRIC_TRAIN" }; engine modes { "ELECTRIC_TRAIN" }</td><td>{ "TRAIN" }; engine modes { "TRAIN" }</td></tr>
+<tr><td><code>transportVehicle.reversible</code></td><td>true (double cab)</td><td>false</td></tr>
+<tr><td><code>seatProvider</code></td><td>2 crew seats, <code>forward</code> true/false, groups = the two headlight meshes</td><td>1 crew seat (driver), 1 crew seat idle (fireman)</td></tr>
+<tr><td>Emitters</td><td>none</td><td><code>emitter_smoke_dark</code> at the chimney; steam at cylinders optional</td></tr>
+<tr><td>Parts events</td><td>headlights fwd/rev → front_forward / front_backward</td><td>lamps → front_forward_parts</td></tr>
+</tbody></table>
+
+</body></html>

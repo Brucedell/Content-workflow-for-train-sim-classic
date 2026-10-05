@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 0 — Start Here</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide (branch of the TSC workflow)</div>
+    <div class="partno">Part 0</div>
+    <h1>Start here: one model, two games</h1>
+    <div class="sub">How the same Blender train that goes into Train Sim Classic also becomes a Transport Fever&nbsp;3 vehicle mod,
+      where the two pipelines part company, and what each game needs that the other does not.</div>
+  </div>
+  <div class="toc">
+    <h3>The TF3 guide set</h3>
+    <table>
+      <thead><tr><th style="width:18mm">Part</th><th style="width:62mm">Title</th><th>What you get from it</th></tr></thead>
+      <tbody>
+        <tr><td><b>0</b></td><td>Start Here</td><td>The branch point, the two pipelines side by side, the TF3 mod folder, conventions, glossary.</td></tr>
+        <tr><td><b>1</b></td><td>What a TF3 Vehicle Actually Is</td><td>The .mdl model tree, metadata structs, node names as the contract, events instead of control values.</td></tr>
+        <tr><td><b>2</b></td><td>Preparing the Shared Model for TF3</td><td>Axes, origins, node and material naming, LOD files, textures (PBR), what to drop and what to add.</td></tr>
+        <tr><td><b>3</b></td><td>Animations for TF3</td><td>Event names, NLA strips, wheel/door/forever animations, direction-dependent parts, pantographs.</td></tr>
+        <tr><td><b>4</b></td><td>Model Editor and Metadata</td><td>FBX import, the metadata structs field by field, validation, icons, multiple units, buy groups.</td></tr>
+        <tr><td><b>5</b></td><td>Scripting in TF3</td><td>Transformators, what moves from TSC Lua and what does not, the trolley-pole case.</td></tr>
+        <tr><td><b>6</b></td><td>Build, Test and Publish</td><td>Staging area, iteration loop, in-game test order, mod.io, troubleshooting.</td></tr>
+        <tr><td><b>7</b></td><td>The Branch Tooling</td><td>TF3 Export Prep add-on, naming map, texture conversion, further script ideas.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot">Sources: the Transport Fever 3 Wiki modding manual pages supplied with this project (Model Editor, Vehicle Basics, Vehicle Types,
+  Vehicle Advanced Topics, Repaint Mods, API index) and the TSC guide set in <code>guide/</code>. Statements taken from those pages are marked
+  <span class="pill v">manual</span>; statements inferred from Transport Fever 2 practice or needing confirmation in your installation are marked
+  <span class="pill u">check</span>.</div>
+</section>
+
+<h1>Where the pipelines branch</h1>
+<p>Both games want the same thing from Blender: a clean, correctly scaled, well-named model with its moving parts keyed. After that they
+diverge completely. Train Sim Classic wants an <code>.igs</code> plus XML blueprints and a per-vehicle Lua script; Transport Fever&nbsp;3 wants
+<b>FBX files, one per level of detail</b>, imported by its own <b>Model Editor</b>, which writes the <code>.mdl</code>/<code>.msh</code>/<code>.mtl</code>
+files and holds the vehicle's metadata. Nothing from the TSC blueprint side is reusable in TF3, and nothing from the TF3 metadata side is
+reusable in TSC. The model and its animations are.</p>
+
+<figure>
+<svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker>
+  <marker id="a0b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#16324f"/></marker></defs>
+  <!-- shared -->
+  <rect x="10" y="130" width="150" height="140" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.6"/>
+  <text x="85" y="152" text-anchor="middle" font-weight="bold">Shared Blender model</text>
+  <text x="20" y="172">metres, origin on rail</text><text x="20" y="188">body / bogies / wheels</text><text x="20" y="204">doors, pantographs,</text><text x="20" y="220">wipers keyed</text>
+  <text x="20" y="240">TSC names kept as the</text><text x="20" y="256">master naming</text>
+  <!-- branch node -->
+  <circle cx="200" cy="200" r="14" fill="#4a2c5e"/><text x="200" y="204" text-anchor="middle" fill="#fff" font-weight="bold">⑂</text>
+  <line x1="160" y1="200" x2="184" y2="200" stroke="#4a2c5e" stroke-width="2"/>
+  <!-- TSC lane -->
+  <rect x="240" y="20" width="470" height="150" rx="7" fill="#fff" stroke="#16324f" stroke-width="1.6"/>
+  <rect x="240" y="20" width="470" height="24" rx="7" fill="#16324f"/><text x="475" y="37" text-anchor="middle" fill="#fff" font-weight="bold">Train Sim Classic lane (guide/ Parts 2–6)</text>
+  <g>
+    <rect x="252" y="56" width="100" height="44" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="302" y="74" text-anchor="middle" font-weight="bold">BRIAGE</text><text x="302" y="90" text-anchor="middle">.igs + .ia</text>
+    <rect x="364" y="56" width="110" height="44" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="419" y="74" text-anchor="middle" font-weight="bold">Blueprint Ed. 2</text><text x="419" y="90" text-anchor="middle">.xml .csv</text>
+    <rect x="486" y="56" width="100" height="44" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="536" y="74" text-anchor="middle" font-weight="bold">Lua script</text><text x="536" y="90" text-anchor="middle">per vehicle</text>
+    <rect x="598" y="56" width="100" height="44" rx="5" fill="#16324f"/><text x="648" y="74" text-anchor="middle" fill="#fff" font-weight="bold">TSC</text><text x="648" y="90" text-anchor="middle" fill="#cfe3f5">you drive it</text>
+    <text x="475" y="130" text-anchor="middle" fill="#5b6676">LOD in the object name · Y forward · control values · cab interior · physics you author</text>
+    <text x="475" y="150" text-anchor="middle" fill="#5b6676">Toolkit: validate · measure → bogie XML · patch blueprint · IA jobs</text>
+  </g>
+  <!-- TF3 lane -->
+  <rect x="240" y="230" width="470" height="150" rx="7" fill="#fff" stroke="#4a2c5e" stroke-width="1.6"/>
+  <rect x="240" y="230" width="470" height="24" rx="7" fill="#4a2c5e"/><text x="475" y="247" text-anchor="middle" fill="#fff" font-weight="bold">Transport Fever 3 lane (this guide set)</text>
+  <g>
+    <rect x="252" y="266" width="100" height="44" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="302" y="284" text-anchor="middle" font-weight="bold">Export Prep</text><text x="302" y="300" text-anchor="middle">_lod0.fbx, _lod1…</text>
+    <rect x="364" y="266" width="110" height="44" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="419" y="284" text-anchor="middle" font-weight="bold">Model Editor</text><text x="419" y="300" text-anchor="middle">.mdl .msh .mtl .ani</text>
+    <rect x="486" y="266" width="100" height="44" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="536" y="284" text-anchor="middle" font-weight="bold">Metadata</text><text x="536" y="300" text-anchor="middle">+ optional .trf.lua</text>
+    <rect x="598" y="266" width="100" height="44" rx="5" fill="#4a2c5e"/><text x="648" y="284" text-anchor="middle" fill="#fff" font-weight="bold">TF3</text><text x="648" y="300" text-anchor="middle" fill="#e9d8f5">the game drives it</text>
+    <text x="475" y="340" text-anchor="middle" fill="#5b6676">LOD in the file name · X forward · node names + events · no cab · physics from a few numbers</text>
+    <text x="475" y="360" text-anchor="middle" fill="#5b6676">Tooling: name map · rotate · split LODs · NLA events · .import.lua template</text>
+  </g>
+  <path d="M214,192 C230,150 230,78 250,78" stroke="#16324f" stroke-width="2" fill="none" marker-end="url(#a0b)"/>
+  <path d="M214,208 C230,250 230,288 250,288" stroke="#4a2c5e" stroke-width="2" fill="none" marker-end="url(#a0)"/>
+  <g stroke="#8a4fb8" stroke-width="1.6" fill="none" marker-end="url(#a0)"><line x1="352" y1="288" x2="362" y2="288"/><line x1="474" y1="288" x2="484" y2="288"/><line x1="586" y1="288" x2="596" y2="288"/></g>
+  <g stroke="#1f6fb2" stroke-width="1.6" fill="none" marker-end="url(#a0b)"><line x1="352" y1="78" x2="362" y2="78"/><line x1="474" y1="78" x2="484" y2="78"/><line x1="586" y1="78" x2="596" y2="78"/></g>
+</svg>
+<figcaption><b>Figure 0.1 · The branch.</b> Everything left of the fork is shared and stays named the TSC way (that naming is stricter, so it is
+the better master). The TF3 Export Prep add-on (Part&nbsp;7) performs the renaming, rotation and LOD split on a temporary copy, so the shared scene
+is never edited for TF3's sake.</figcaption>
+</figure>
+
+<h2>What is the same and what is different</h2>
+<table>
+<thead><tr><th style="width:36mm">Topic</th><th>Train Sim Classic</th><th>Transport Fever 3</th></tr></thead>
+<tbody>
+<tr><td>Who drives</td><td>The player, from a modelled cab, through control values.</td><td>The game's simulation. No cab interior, no driver controls, no HUD.</td></tr>
+<tr><td>Model file</td><td>One <code>.igs</code> with all LODs; cab is a second <code>.igs</code>.</td><td>One FBX per LOD (<code>name_lod0.fbx</code>, <code>_lod1</code>…), converted to <code>.msh</code> per node by the Model Editor. <span class="pill v">manual</span></td></tr>
+<tr><td>Where LOD lives</td><td>In the object name: <code>1_0500_engine</code>.</td><td>In the file name; the node is just <code>body</code>, suffixed <code>_lod0</code> automatically. <span class="pill v">manual</span></td></tr>
+<tr><td>Forward axis in Blender</td><td>+Y.</td><td>+X (metadata positions “along the lane” are x; seats sit at x = ±8.5 on a loco). <span class="pill v">manual</span></td></tr>
+<tr><td>Up axis</td><td>Z (Blender) → Y in the file; BRIAGE swaps.</td><td>Z; export FBX with Z up, tick “Use Blender Coordinate System” on import. <span class="pill v">manual</span></td></tr>
+<tr><td>How parts are identified</td><td>Node names inside the IGS, referenced from blueprints.</td><td>Node names inside the <code>.mdl</code>, referenced from metadata (<code>axles = { "w1", "w2" }</code>). <span class="pill v">manual</span></td></tr>
+<tr><td>Bogies and wheels</td><td>Bogie blueprint per bogie; axle nodes, radius, offsets typed into XML.</td><td>Any node containing axle meshes is a bogie; its origin is the pivot; axles rotate about their own y axis. Nothing to type except the axle list. <span class="pill v">manual</span></td></tr>
+<tr><td>Animation</td><td>One <code>.ia</code> per animation, played by a control value (scrubbed) or toggled.</td><td>Keyframes inside the FBX become <code>.ani</code> files; each is named after a game <b>event</b> (<code>wheels</code>, <code>open_doors_left</code>, <code>forward_parts_on</code>…) that the game fires. <span class="pill v">manual</span></td></tr>
+<tr><td>Materials</td><td>Shader name + texture slots (diffuse, specular…).</td><td>PBR: albedo(+opacity), normal, metal/gloss/AO, colour-blend/dirt/rust, emissive. Material type chosen by <code>|shortcode</code>. <span class="pill v">manual</span></td></tr>
+<tr><td>Physics</td><td>Full engine simulation blueprint: curves, brakes, air system.</td><td>Four numbers per engine type: power kW, tractive effort kN, top speed m/s, weight kg (+ friction, brake deceleration). <span class="pill v">manual</span></td></tr>
+<tr><td>Scripting</td><td>Per-vehicle Lua reading/writing controls every frame.</td><td>Optional <b>transformator</b> scripts that only compute animation states and particles; no gameplay logic per vehicle. <span class="pill v">manual</span></td></tr>
+<tr><td>Passengers / cargo</td><td>Not modelled.</td><td>Compartments, capacities, seat locators, load indicators; the game shows people and cargo. <span class="pill v">manual</span></td></tr>
+<tr><td>Numbers / liveries</td><td>Digit decals + numbering CSV.</td><td>Labels (text locators) and colour-blend masks; repaint mods are a formal thing. <span class="pill v">manual</span></td></tr>
+<tr><td>Testing tool</td><td>BPE2 preview, then the game.</td><td>Model Editor: live reload on file change, validation button, screenshots/icons. <span class="pill v">manual</span></td></tr>
+<tr><td>Distribution</td><td>Assets folder / .rwp.</td><td>Mod folder with <code>mod.json</code>, <code>modinfo.json</code>; shared through mod.io. <span class="pill v">manual</span></td></tr>
+</tbody></table>
+
+<h2>What the supplied manual covers, and what it does not</h2>
+<div class="two">
+<div class="box"><span class="t">Covered (49 pages)</span><ul>
+<li>Model Editor: UI, loading/saving, FBX import rules, naming of nodes/materials/textures, animations via NLA strips, lights, seats, emitters, bounding box, labels, bulk import, validation messages, icons, options.</li>
+<li>Vehicle Basics: emissions, <code>transportVehicle</code>, compartments, seats, sound.</li>
+<li>Vehicle Types: <code>landVehicle</code>, road/rail/water/air structs, animation events, multiple units.</li>
+<li>Advanced: transformator scripts, reversible trains and direction-dependent parts, buy-menu groups, fake bogies.</li>
+<li>Repaint mods; API index.</li>
+</ul></div>
+<div class="box warn"><span class="t">Not in the supplied pages <span class="pill u">check</span></span><ul>
+<li><b>Mod Definition</b> (<code>mod.json</code>, <code>modinfo.json</code> fields), <b>Resource Types &amp; Structure</b>, the <b>.mdl / .msh / .mtl</b> reference pages, <b>Guidelines &amp; Requirements</b> (polygon and texture budgets), <b>Best Practices</b>, <b>Publish a mod</b>, <b>External Tools</b>.</li>
+<li>The material <b>shortcode table</b> the import names rely on.</li>
+<li>Where this guide needs those, it states what is known from the covered pages and from Transport Fever&nbsp;2 practice, and marks it <span class="pill u">check</span>. Fetch those wiki pages before your first real import.</li>
+</ul></div>
+</div>
+
+<h2>The TF3 mod folder</h2>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono, monospace" font-size="9.5">
+  <g fill="#1b2330">
+  <text x="6" y="16" font-weight="bold">&lt;userdata&gt;/mods/   (or the staging area the Model Editor saves to)</text>
+  <text x="18" y="34" font-weight="bold" fill="#8a4fb8">myname_myloco_1/</text><text x="200" y="34" fill="#5b6676" font-family="DejaVu Sans, Arial">← mod id (what other mods reference as modid::)</text>
+  <text x="30" y="52">mod.json</text><text x="200" y="52" fill="#5b6676" font-family="DejaVu Sans, Arial">dependencies, parameters  (check)</text>
+  <text x="30" y="70">modinfo.json</text><text x="200" y="70" fill="#5b6676" font-family="DejaVu Sans, Arial">name, authors, description, preview image for the mod browser</text>
+  <text x="30" y="88">strings.json</text><text x="200" y="88" fill="#5b6676" font-family="DejaVu Sans, Arial">localised VEHICLE_..._NAME / _DESCRIPTION</text>
+  <text x="30" y="106">content/</text>
+  <text x="42" y="124">vehicle/train/myloco/</text><text x="200" y="124" fill="#5b6676" font-family="DejaVu Sans, Arial">from import folder “vehicle-train-myloco”</text>
+  <text x="54" y="142">myloco.mdl</text><text x="200" y="142" fill="#5b6676" font-family="DejaVu Sans, Arial">Lua table: lods → node tree → mesh + materials; metadata</text>
+  <text x="54" y="160">msh/body_lod0.msh  w1_lod0.msh …</text><text x="330" y="160" fill="#5b6676" font-family="DejaVu Sans, Arial">one per node per LOD (+ .msh.blob)</text>
+  <text x="54" y="178">mat/body.mtl …    ani/wheels.ani …</text><text x="330" y="178" fill="#5b6676" font-family="DejaVu Sans, Arial">materials; animations named by event</text>
+  <text x="54" y="196">textures/body_alb.dds _nrm _mga _cdr</text><text x="330" y="196" fill="#5b6676" font-family="DejaVu Sans, Arial">.tga converted to .dds on save</text>
+  <text x="42" y="214">ui/models_small/… ui/models_large/…</text><text x="330" y="214" fill="#5b6676" font-family="DejaVu Sans, Arial">icons from the SCREENSHOT button</text>
+  </g>
+</svg>
+<figcaption><b>Figure 0.2 · A TF3 vehicle mod.</b> Folder placement under <code>content/</code> follows the import folder name
+(<code>&lt;folder1&gt;-&lt;folder2&gt;-&lt;mdlname&gt;/</code> → <code>folder1/folder2/mdlname/mdlname.mdl</code>) <span class="pill v">manual</span>.
+Exact sub-folder names (<code>msh</code>, <code>mat</code>, <code>ani</code>, <code>textures</code>, <code>ui</code>) are the TF2 convention and the ones the manual's
+examples show <span class="pill u">check</span>.</figcaption>
+</figure>
+
+<h2>Conventions in this set</h2>
+<table>
+<thead><tr><th style="width:40mm">Convention</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>“TSC guide”</td><td>The eight PDFs in <code>guide/</code>. Shared modelling rules are not repeated here; this set only states what TF3 adds or changes.</td></tr>
+<tr><td>TF3 vehicle axes</td><td>X = forward (along the lane), Y = left, Z = up, metres, origin on the rail head at the vehicle centre. <span class="pill v">manual</span> for X-forward and “origin of an axle centred above the lane”; the rest <span class="pill u">check</span>.</td></tr>
+<tr><td><code>body</code>, <code>w1</code>, <code>bogie_front</code></td><td>TF3 node names as the Export Prep add-on generates them from <code>1_0500_engine</code>, <code>1_0500_bo01wh01</code>, <code>1_0500_bo01</code>.</td></tr>
+<tr><td><span class="pill v">manual</span></td><td>Stated in the supplied TF3 wiki pages.</td></tr>
+<tr><td><span class="pill u">check</span></td><td>Inferred or from TF2; confirm in your Model Editor / game.</td></tr>
+</tbody></table>
+
+<h2>Glossary</h2>
+<table>
+<thead><tr><th style="width:36mm">Term</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Model Editor</td><td>Urban Games' tool (<code>ModelEditor.bat/.sh/.command</code>) that imports FBX, edits metadata and materials, validates, and makes icons. <span class="pill v">manual</span></td></tr>
+<tr><td>.mdl</td><td>A Lua file returning the model: <code>lods</code> (node trees with mesh and material references) and <code>metadata</code> (vehicle structs).</td></tr>
+<tr><td>.msh / .msh.blob</td><td>One mesh per node per LOD, written by the Model Editor from the FBX. <span class="pill v">manual</span></td></tr>
+<tr><td>.mtl</td><td>Material: type plus texture map references (<code>map_albedo_opacity</code>, <code>map_normal</code>, <code>map_metal_gloss_ao</code>, <code>map_cblend_dirt_rust</code>…). <span class="pill v">manual</span></td></tr>
+<tr><td>.ani</td><td>Animation generated from FBX keyframes; named after the event. <span class="pill v">manual</span></td></tr>
+<tr><td>Event</td><td>A named moment the game triggers on a vehicle (<code>open_doors_left</code>, <code>brake_lights_on</code>…) or a continuous channel (<code>wheels</code>, <code>drive</code>, <code>forever</code>). <span class="pill v">manual</span></td></tr>
+<tr><td>Transformator</td><td>A <code>.trf.lua</code> + script that turns simulation state into animation states and particle settings. <span class="pill v">manual</span></td></tr>
+<tr><td>Fake bogie</td><td>A scripted pivot point on a node that has no real bogie (articulated vehicles). <span class="pill v">manual</span></td></tr>
+<tr><td>Multiple unit</td><td>A fixed consist of several <code>.mdl</code>s defined in a <code>.mu.lua</code>. <span class="pill v">manual</span></td></tr>
+<tr><td>Staging area</td><td>Mods folder the Model Editor reads and writes; found via the game's user data folder. <span class="pill v">manual</span></td></tr>
+<tr><td>mod.io</td><td>The platform TF3 mods are shared through. <span class="pill v">manual</span></td></tr>
+</tbody></table>
+
+<div class="box tip"><span class="t">How to use this set</span>
+<p>Read Part&nbsp;1 to understand what TF3 wants, then Part&nbsp;2 before you touch the shared model: three habits (origins on hinges, separate axle objects,
+a driver empty) cost nothing in TSC and save a day in TF3. Use Part&nbsp;7's Export Prep for every TF3 export so the shared scene never drifts.</p></div>
+
+</body></html>

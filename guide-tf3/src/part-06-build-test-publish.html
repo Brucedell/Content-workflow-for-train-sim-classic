@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 6 — Build, Test and Publish</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 6</div>
+    <h1>Build, test and publish</h1>
+    <div class="sub">The TF3 iteration loop is shorter than TSC's because the Model Editor reloads on file change and validates on demand. This part sets up that loop,
+      gives an in-game test order for rail vehicles, covers mod packaging for mod.io, and ends with a symptom table.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>The iteration loop</li>
+    <li>The mod skeleton</li>
+    <li>Testing in the Model Editor</li>
+    <li>Testing in the game</li>
+    <li>Repaint and variant workflow</li>
+    <li>Publishing</li>
+    <li>Troubleshooting</li>
+  </ol></div>
+  <div class="foot">Model Editor behaviour from its manual page; mod.json/modinfo.json details from the Repaint Mods page only (the Mod Definition and Publish pages were not supplied).</div>
+</section>
+
+<h1>1 · The iteration loop</h1>
+<figure>
+<svg viewBox="0 0 720 190" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <g>
+    <rect x="10" y="60" width="130" height="60" rx="30" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/><text x="75" y="86" text-anchor="middle" font-weight="bold">Edit</text><text x="75" y="102" text-anchor="middle">shared .blend / textures</text>
+    <rect x="170" y="60" width="130" height="60" rx="30" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.5"/><text x="235" y="86" text-anchor="middle" font-weight="bold">Export Prep</text><text x="235" y="102" text-anchor="middle">FBX set</text>
+    <rect x="330" y="60" width="130" height="60" rx="30" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.5"/><text x="395" y="86" text-anchor="middle" font-weight="bold">Model Editor</text><text x="395" y="102" text-anchor="middle">import · validate · save</text>
+    <rect x="490" y="60" width="100" height="60" rx="30" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.5"/><text x="540" y="86" text-anchor="middle" font-weight="bold">Preview</text><text x="540" y="102" text-anchor="middle">auto-reload</text>
+    <rect x="620" y="60" width="90" height="60" rx="30" fill="#4a2c5e"/><text x="665" y="86" text-anchor="middle" font-weight="bold" fill="#fff">Game</text><text x="665" y="102" text-anchor="middle" fill="#e9d8f5">buy &amp; run</text>
+  </g>
+  <g stroke="#4a2c5e" stroke-width="1.8" marker-end="url(#m6)"><line x1="140" y1="90" x2="168" y2="90"/><line x1="300" y1="90" x2="328" y2="90"/><line x1="460" y1="90" x2="488" y2="90"/><line x1="590" y1="90" x2="618" y2="90"/></g>
+  <path d="M540,120 C540,170 75,170 75,122" stroke="#a86400" stroke-width="1.5" fill="none" stroke-dasharray="6 4" marker-end="url(#m6)"/>
+  <text x="310" y="166" text-anchor="middle" fill="#a86400">texture and metadata edits reload live in the preview; mesh and animation edits need a re-import</text>
+</svg>
+<figcaption><b>Figure 6.1 · Shorter than the TSC loop.</b> With <b>Enable Auto Update</b> on, a saved texture or edited .mtl/.mdl reloads in the viewport without re-import. <span class="pill v">manual</span></figcaption>
+</figure>
+<table>
+<thead><tr><th style="width:60mm">You changed…</th><th>Redo</th></tr></thead>
+<tbody>
+<tr><td>Textures</td><td>Save .tga into the mod's texture folder; the preview reloads (choose <i>On Focus</i> if you see black textures). Model Editor converts to .dds on save. <span class="pill v">manual</span></td></tr>
+<tr><td>Material type or maps</td><td>Materials window, or re-import with Overwrite Materials off to keep edits. <span class="pill v">manual</span></td></tr>
+<tr><td>Metadata values</td><td>Metadata window; Validate; Save (MODEL only). <span class="pill v">manual</span></td></tr>
+<tr><td>Mesh geometry / hierarchy / names</td><td>Export Prep → drag the folder again with Overwrite Meshes on; metadata is kept if you leave Overwrite Materials/Animations off or re-apply the .import.lua. <span class="pill v">manual</span></td></tr>
+<tr><td>Animation keys or strip names</td><td>Re-import with Overwrite Animations on. <span class="pill v">manual</span></td></tr>
+<tr><td>LOD distances, bounding box</td><td>Model window (per-LOD tabs; recalculate bounding box / extent buttons). <span class="pill v">manual</span></td></tr>
+</tbody></table>
+
+<h1>2 · The mod skeleton</h1>
+<div class="two">
+<div>
+<pre><span class="c">modinfo.json  (display data for the mod browser)</span>
+{
+  "name": "My Loco",
+  "description": "…",
+  "authors": [ { "name": "you", "role": "CREATOR" } ],
+  "minorVersion": 0,
+  "severityAdd": "NONE", "severityRemove": "WARNING",
+  "tags": [ "Train", "Vehicle" ]
+}</pre>
+<p class="small">Keys shown are the TF2 convention; the manual only states what the file is for (name, description, authors, preview image, dependency note). <span class="pill u">check</span> against the Mod Definition page.</p>
+</div>
+<div>
+<pre><span class="c">mod.json  (technical definition)</span>
+{
+  "dependencies": [ "someone_othermod_1" ],
+  …
+}</pre>
+<p class="small">“Most important is the specification of the correct dependency” when you reference another mod's meshes/materials with <code>modid::</code>. <span class="pill v">manual</span>
+Other fields <span class="pill u">check</span>.</p>
+<p class="small">Also: <code>strings.json</code> for the <code>_("…")</code> keys used in <code>description</code>, and the preview image.</p>
+</div>
+</div>
+<p>Create the mod folder in the staging area <em>before</em> the first import so the Model Editor can select it as the save target. <span class="pill v">manual</span></p>
+
+<h1>3 · Testing in the Model Editor</h1>
+<table>
+<thead><tr><th style="width:8mm">#</th><th style="width:60mm">Check (Options ▸ Rendering / Config)</th><th>Looks for</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Axes + Nodes + Node Names on</td><td>Front along +x; node origins where you expect; names as in the metadata.</td></tr>
+<tr><td>2</td><td>Bogies / Fake Bogies locators</td><td>Pivot markers midway between axles; fake bogie where a body lacks a second bogie.</td></tr>
+<tr><td>3</td><td>Bounding Box, Extent, Collider</td><td>Box encloses the model (the <code>|bounding_box</code> helper did its job); extent sensible.</td></tr>
+<tr><td>4</td><td>LOD selector 0, 1, … and the Lod scale slider</td><td>Every LOD complete; animated parts present at LOD 1.</td></tr>
+<tr><td>5</td><td>Animation dropdown + loop</td><td>Each event strip plays, starts at rest, doors clear the body.</td></tr>
+<tr><td>6</td><td>Seat Locators, Passengers/Cargo sliders</td><td>Crew in the cab, passengers in seats, nothing floating.</td></tr>
+<tr><td>7</td><td>Light Source Locators, Time of Day at night</td><td>Headlights where the meshes are; emissive lamps glow.</td></tr>
+<tr><td>8</td><td>Preview Particles with velocity</td><td>Smoke from the chimney, scaled by speed.</td></tr>
+<tr><td>9</td><td>Color and Age sliders</td><td>Colour-blend mask recolours the right areas; dirt/rust layers plausible.</td></tr>
+<tr><td>10</td><td>Validate button</td><td>No messages left (Part&nbsp;4 §6).</td></tr>
+<tr><td>11</td><td>Screenshot</td><td>Icons generated into the mod.</td></tr>
+</tbody></table>
+<p class="small">All options named exist in the manual's Options chapter. <span class="pill v">manual</span></p>
+
+<h1>4 · Testing in the game</h1>
+<ol class="steps">
+<li>Enable the mod for a new or existing game (mod manager). <span class="pill u">check</span> menu names.</li>
+<li>Buy the vehicle in a rail depot: it must appear in the store with its icons, name and description (needs <code>filterTags</code> matching the depot, default is fine, and the year within <code>availability</code>). <span class="pill v">manual</span></li>
+<li>Couple a wagon and run a line: watch coupling distance, bogie tracking in curves, wheel spin rate, sagging or floating (axle origins).</li>
+<li>Stop at a station: doors open on the platform side after <code>arrivalDelay</code>, passengers board, doors close before departure.</li>
+<li>Reverse at a terminus: headlights/tail lamps switch ends; pantograph instance switches; crew seat moves to the leading end.</li>
+<li>Night: lights on; <b>emissions</b> and <b>speed</b> in the vehicle window as intended.</li>
+<li>Multiple unit and repaint variants appear grouped in the store if configured.</li>
+</ol>
+
+<h1>5 · Repaint and variant workflow</h1>
+<ul>
+<li>Liveries: one <code>.mtl</code> per re-textured material, one <code>.mdl</code> per variant pointing at them in every LOD, new icons, <code>groupFileName</code> to group them. <span class="pill v">manual</span></li>
+<li>If you repaint someone else's vehicle, obtain permission, use a different modId and declare the dependency. <span class="pill v">manual</span></li>
+<li>Work from texture source files, not the shipped .dds. <span class="pill v">manual</span></li>
+<li>The Model Editor's <b>Copy</b> tool duplicates a model into another mod; <b>Rename</b> does search/replace on file names; <b>Convert</b> migrates TF2 models. <span class="pill v">manual</span></li>
+</ul>
+
+<h1>6 · Publishing</h1>
+<ul>
+<li>TF3 mods are shared through <b>mod.io</b>; the manual's “Publish a mod” page was not supplied <span class="pill u">check</span> its upload steps and the Curated Mods Program rules.</li>
+<li>Ship only what is yours and new: do not re-ship base-game or other mods' files; reference them with <code>::/</code> and <code>modid::/</code> instead. <span class="pill v">manual</span></li>
+<li>Include all three UI icons per model, <code>strings.json</code> entries for every <code>_("…")</code>, and a preview image.</li>
+<li>Run Validate on every model (Tools ▸ Validate handles many at once). <span class="pill v">manual</span></li>
+</ul>
+
+<h1>7 · Troubleshooting</h1>
+<table>
+<thead><tr><th style="width:52mm">Symptom</th><th>Cause → fix</th></tr></thead>
+<tbody>
+<tr><td>Model Editor won't start / can't find mods</td><td>Config path with backslashes or wrong userDataPath → forward slashes, correct folder. <span class="pill v">manual</span></td></tr>
+<tr><td>Imported model lies on its side or faces sideways</td><td>“Use Blender Coordinate System” unticked, or FBX exported with the wrong forward/up → X forward, Z up. <span class="pill v">manual</span></td></tr>
+<tr><td>Node names end in .001 / meshes duplicated</td><td>Blender suffixes; use <code>#</code> comments or let Export Prep rename. <span class="pill v">manual</span></td></tr>
+<tr><td>Black textures after saving in the paint program</td><td>Auto Update raced the file write → On Focus. <span class="pill v">manual</span></td></tr>
+<tr><td>Material count mismatch warnings</td><td>Material slots vs mesh groups differ → fix slots in Blender, re-import. <span class="pill v">manual</span></td></tr>
+<tr><td>Axles wobble</td><td>Axle origin not centred in x/z → fix origin. <span class="pill v">manual</span></td></tr>
+<tr><td>Body misaligned in curves</td><td>Bogie origins not between axles, or a single-bogie body without a fake bogie. <span class="pill v">manual</span></td></tr>
+<tr><td>Vehicle not in the depot</td><td>Year outside availability; <code>filterTags</code> mismatch; <code>multipleUnitOnly = true</code>. <span class="pill v">manual</span></td></tr>
+<tr><td>Multiple unit missing</td><td>One part outside its availability years. <span class="pill v">manual</span></td></tr>
+<tr><td>Doors / lights never animate</td><td>Strip name not an event; missing <code>_on</code>/<code>_off</code> pair; custom transformator not calling the util helpers.</td></tr>
+<tr><td>Ship never reaches top speed</td><td>(Water only) area too large for availPower. <span class="pill v">manual</span></td></tr>
+<tr><td>Crash or glitch on a skinned mesh</td><td>Skinned mesh with unskinned material → remove vertex groups or use Skin material. <span class="pill v">manual</span></td></tr>
+</tbody></table>
+
+</body></html>

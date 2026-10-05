@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TF3 Part 3 — Animations for TF3</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Transport Fever 3 · Vehicle Workflow Guide</div>
+    <div class="partno">Part 3</div>
+    <h1>Animations for TF3: events, strips and direction-dependent parts</h1>
+    <div class="sub">The same keyframes you made for TSC's <code>.ia</code> files become TF3 <code>.ani</code> files, but they are triggered by game events, not by control values.
+      This part lists the rail-vehicle event vocabulary, how to name strips in Blender, and how pantographs, doors, wheels and lights map.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>How an animation gets from Blender into TF3</li>
+    <li>The rail vehicle event vocabulary</li>
+    <li>Keyframe rules</li>
+    <li>Wheels and rods</li>
+    <li>Doors and the arrival/departure delays</li>
+    <li>Direction- and position-dependent parts (lights, pantographs, gangways)</li>
+    <li>Pantographs: the TSC-to-TF3 translation</li>
+    <li>Mapping table: TSC animation → TF3 event</li>
+    <li>Troubleshooting</li>
+  </ol></div>
+  <div class="foot">Event names are quoted from the Vehicle Types and Vehicle Advanced Topics pages; NLA import behaviour from the Model Editor page.</div>
+</section>
+
+<h1>1 · How an animation gets from Blender into TF3</h1>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a2c5e"/></marker></defs>
+  <rect x="10" y="30" width="160" height="70" rx="6" fill="#fdf3e2" stroke="#a86400"/><text x="20" y="50" font-weight="bold">Blender action</text><text x="20" y="66">on object door_l</text><text x="20" y="82">frames 0 → 48</text>
+  <rect x="200" y="30" width="160" height="70" rx="6" fill="#f1e9f8" stroke="#8a4fb8"/><text x="210" y="50" font-weight="bold">NLA strip</text><text x="210" y="66">named “open_doors_left”</text><text x="210" y="82">(strip name = event)</text>
+  <rect x="390" y="30" width="150" height="70" rx="6" fill="#fff" stroke="#16324f"/><text x="400" y="50" font-weight="bold">FBX</text><text x="400" y="66">baked NLA strips</text><text x="400" y="82">in myloco_lod0.fbx</text>
+  <rect x="570" y="30" width="140" height="70" rx="6" fill="#4a2c5e"/><text x="580" y="50" font-weight="bold" fill="#fff">.mdl node</text><text x="580" y="66" fill="#e9d8f5">animations = {</text><text x="580" y="82" fill="#e9d8f5"> open_doors_left = … }</text>
+  <g stroke="#4a2c5e" stroke-width="1.8" marker-end="url(#f3)"><line x1="170" y1="65" x2="198" y2="65"/><line x1="360" y1="65" x2="388" y2="65"/><line x1="540" y1="65" x2="568" y2="65"/></g>
+  <text x="360" y="130" text-anchor="middle" fill="#5b6676">“In Blender, the animations need to be saved as non linear animations (NLA)… the strips themselves have the correct name of the animation event.”</text>
+</svg>
+<figcaption><b>Figure 3.1 · Strip name = event name</b> <span class="pill v">manual</span>. One strip per animated object; several objects answering the same event use the same
+strip name with <code>#…</code> to keep Blender from appending <code>.001</code>. The add-on pushes tagged actions into strips for you.</figcaption>
+</figure>
+
+<h1>2 · The rail vehicle event vocabulary</h1>
+<table>
+<thead><tr><th style="width:52mm">Event / channel <span class="pill v">manual</span></th><th>Fired when</th><th style="width:48mm">Typical node</th></tr></thead>
+<tbody>
+<tr><td><code>forever</code></td><td>Always; looped; any length.</td><td>Roof fan, radar, beacon</td></tr>
+<tr><td><code>drive</code></td><td>Continuously, mapped to current speed.</td><td>Rods, valve gear, anything speed-driven</td></tr>
+<tr><td><code>wheels</code></td><td>Continuously; animation length mapped to one wheel rotation by the engine (rail only).</td><td>Wheels that are not plain axle nodes</td></tr>
+<tr><td><code>open_all_doors</code> / <code>close_all_doors</code></td><td>Stop at a station, both sides.</td><td>Doors</td></tr>
+<tr><td><code>open_doors_left</code> / <code>close_doors_left</code>, <code>…_right</code></td><td>Stop with platform on that side.</td><td>Doors per side</td></tr>
+<tr><td><code>brake_lights_on</code> / <code>brake_lights_off</code></td><td>Braking starts / ends.</td><td>Tail lamps</td></tr>
+<tr><td><code>blink_lights_left_on/off</code>, <code>…_right_…</code></td><td>Trams only: turning / departing.</td><td>Indicators</td></tr>
+<tr><td><code>front_forward_parts_on/off</code>, <code>inner_forward_…</code>, <code>back_forward_…</code></td><td>Position in the consist while driving forward.</td><td>Headlights, tail lamps, gangways, pantograph</td></tr>
+<tr><td><code>front_backward_parts_on/off</code>, <code>inner_backward_…</code>, <code>back_backward_…</code></td><td>Same, driving backward (reversible consists).</td><td>Same, other end</td></tr>
+<tr><td><code>forward_parts_on/off</code>, <code>backward_parts_on/off</code></td><td>Direction only.</td><td>Direction-specific details</td></tr>
+<tr><td><code>has_previous_on/off</code>, <code>has_no_previous_…</code>, <code>has_next_…</code>, <code>has_no_next_…</code></td><td>Whether a vehicle is coupled ahead / behind.</td><td>End-of-train devices, gangway bellows</td></tr>
+</tbody></table>
+<p>“Each position requires both the on and off animation event to be present” and “an instance of a mesh can't be used for multiple of these purposes. To use the same
+mesh in several cases, add another instance of it.” <span class="pill v">manual</span> The base game ships ready-made on/off animations:
+<code>::/vehicle/shared/ani/front_forward_parts_on.ani</code> / <code>_off.ani</code>, referenced as <code>type = "FILE_REF"</code>. <span class="pill v">manual</span></p>
+
+<h1>3 · Keyframe rules</h1>
+<div class="box rule"><span class="t">Rules the Model Editor validates <span class="pill v">manual</span></span><ul>
+<li>The first keyframe must be at time 0 (“has keyframes starting after 0”).</li>
+<li>An animation needs at least one keyframe; time stamps and transforms must match in number.</li>
+<li>Position-mapped channels (ship rudder, aircraft control surfaces) use keyframes 0 → 1000 with 500 as the middle; rail vehicles have none of these, but the same “0…1000 maps to a state” idea applies if you write a transformator that scrubs an animation.</li>
+</ul></div>
+<ul>
+<li>Durations are real time: a 48-frame door at 24&nbsp;fps is 2&nbsp;s; set <code>arrivalDelay = 2000</code> to match. <span class="pill v">manual</span></li>
+<li>Rest pose at frame 0, as in TSC. The LOD-0 FBX is exported at frame 0.</li>
+<li>Keep the TSC habits: scale applied, origins on hinges, linear keys where the motion is mechanical.</li>
+<li>Door/lamp “off” animations are usually one keyframe hiding or moving the part; the paired “on” animation shows it. Both must exist.</li>
+</ul>
+
+<h1>4 · Wheels and rods</h1>
+<div class="two">
+<div>
+<h3>Plain axles: no animation at all</h3>
+<p>Nodes listed in <code>railVehicle.config.axles</code> are rotated about their y axis by the game from the speed and the mesh radius. <span class="pill v">manual</span> This covers every TSC
+<code>boNNwhNN</code> wheelset. Do not key them.</p>
+</div>
+<div>
+<h3>Rods, cranks, valve gear</h3>
+<p>Key one revolution of the driving wheel and the rods together and put the strips under <code>drive</code> (speed-mapped) or <code>wheels</code> (length mapped to one rotation).
+<span class="pill v">manual</span> Driving wheels that move rods should then <em>not</em> also be in <code>axles</code>, or they would be rotated twice <span class="pill u">check</span>.</p>
+</div>
+</div>
+
+<h1>5 · Doors and the arrival/departure delays</h1>
+<ol class="steps">
+<li>Model each door leaf as its own object (origin on the hinge or slide axis), named e.g. <code>door_l1</code>, <code>door_r1</code>.</li>
+<li>Key open and close as <b>two actions</b>, or key open 0→N and close as the reverse; export both as strips <code>open_doors_left</code> and <code>close_doors_left</code> (right side likewise).</li>
+<li>Set <code>transportVehicle.arrivalDelay</code> and <code>departureDelay</code> in ms to the longest open / close animation. <span class="pill v">manual</span></li>
+<li>Set <code>loadSpeed</code> to roughly the number of door lanes, or −1 for automatic. <span class="pill v">manual</span></li>
+</ol>
+<p>TSC doors (<code>DoorsOpenClose</code> control, toggled or Lua-driven) need no re-keying: the open action becomes the open event strip, played in reverse for close if you prefer a single action.</p>
+
+<h1>6 · Direction- and position-dependent parts</h1>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <g>
+    <rect x="30" y="60" width="200" height="50" rx="6" fill="#e9d8f5" stroke="#4a2c5e" stroke-width="1.5"/><text x="130" y="90" text-anchor="middle" font-weight="bold">loco (reversible)</text>
+    <rect x="250" y="60" width="200" height="50" rx="6" fill="#f4f6f9" stroke="#8a96a6"/><text x="350" y="90" text-anchor="middle">coach</text>
+    <rect x="470" y="60" width="200" height="50" rx="6" fill="#f4f6f9" stroke="#8a96a6"/><text x="570" y="90" text-anchor="middle">driving trailer</text>
+    <text x="30" y="40" font-weight="bold">← driving forward: front is the loco</text>
+    <circle cx="36" cy="72" r="5" fill="#f5d08c" stroke="#a86400"/><text x="46" y="52" font-size="8.5" fill="#a86400">front_forward_parts_on: headlights, raised pantograph</text>
+    <circle cx="664" cy="98" r="5" fill="#b3261e"/><text x="520" y="138" font-size="8.5" fill="#b3261e">back_forward_parts_on: tail lamps lit</text>
+    <text x="250" y="138" font-size="8.5" fill="#5b6676">inner_forward_parts_on: gangway bellows shown; has_next/has_previous: couplers</text>
+    <text x="30" y="175" fill="#5b6676">Driving backward the _backward_ set is used: the trailer becomes “front”, the loco “back”, and the loco's rear pantograph instance shows instead.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 3.2 · Position × direction.</b> These six on/off pairs and the four has_next/has_previous pairs replace most of what TSC vehicles do with
+<code>Headlights</code>/<code>Reverser</code> logic and Lua. <span class="pill v">manual</span></figcaption>
+</figure>
+<p>Crew seats follow the same idea: a seat with <code>forward = true</code> and <code>group = "headlights_fwd"</code> is shown only when that mesh is shown, so the driver appears at the
+leading end. <span class="pill v">manual</span></p>
+
+<h1>7 · Pantographs: the TSC-to-TF3 translation</h1>
+<p>In TSC a pantograph is a toggled <code>.ia</code> on <code>FrontPantographControl</code>, raised by the player. TF3 has no player and no pantograph event; the manual's suggestion is
+“switching pantographs depending on the location in train” with the parts on/off events. <span class="pill v">manual</span> Two workable approaches:</p>
+<div class="two">
+<div class="box"><span class="t">A · Mesh swap (no transformator)</span>
+<p>Export the pantograph twice: a <b>raised</b> instance (keyed at the raised pose) and a <b>lowered</b> instance. Give the raised one <code>back_forward_parts_on/off</code>
+(rear pantograph up when the loco is at the front… or whichever convention your prototype used) and the lowered one the opposite pair. Instant, robust, no code.</p></div>
+<div class="box"><span class="t">B · Animated raise (transformator)</span>
+<p>Keep the TSC raise animation as a strip named e.g. <code>panto_raise</code> and write a transformator that triggers it when the consist starts moving or when the
+position changes (Part&nbsp;5). More work; looks better in depots.</p></div>
+</div>
+<p>For the Texas Electric trolley poles the same two options apply: the pole frame range 0–100 from the TSC spec becomes a single <code>.ani</code>; the game-driven “dewire” gameplay
+has no TF3 counterpart, only the visual (Part&nbsp;5 §6).</p>
+
+<h1>8 · Mapping table: TSC animation → TF3 event</h1>
+<table>
+<thead><tr><th style="width:52mm">TSC</th><th style="width:52mm">TF3</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Wheels via bogie bp axles</td><td><code>railVehicle.config.axles</code></td><td>No animation needed in either game.</td></tr>
+<tr><td>Rods (custom keyword nodes, no .ia; TSC animates rods from wheel rotation via linked nodes <span class="pill u">check</span>)</td><td><code>drive</code> / <code>wheels</code> strips</td><td>Key one revolution.</td></tr>
+<tr><td><code>Wipers</code> (BackAndForthContinuous)</td><td><code>forever</code> (looped)</td><td>TF3 has no rain trigger for vehicles; wipers run always or not at all <span class="pill u">check</span>; most modders omit them.</td></tr>
+<tr><td><code>frontPanto</code>/<code>rearPanto</code> (Toggle)</td><td>parts on/off instances, or transformator</td><td>§7.</td></tr>
+<tr><td><code>DoorsOpenClose</code></td><td><code>open_/close_doors_left/right/all</code></td><td>Set arrival/departure delays.</td></tr>
+<tr><td><code>Headlights</code> + glow meshes</td><td><code>front_/back_forward_parts_on/off</code> + FBX light objects</td><td>Base-game on/off .ani can be referenced.</td></tr>
+<tr><td>Cab levers, needles</td><td>—</td><td>No cab in TF3; skip.</td></tr>
+<tr><td>Steam smoke emitter child</td><td>Emitter locator <code>…smoke_dark…</code></td><td>Default transformator scales with speed/power.</td></tr>
+</tbody></table>
+
+<h1>9 · Troubleshooting</h1>
+<table>
+<thead><tr><th style="width:52mm">Symptom</th><th>Cause → fix</th></tr></thead>
+<tbody>
+<tr><td>Animation imported but never plays</td><td>Strip name is not an event name the rail transformator fires; check spelling against §2.</td></tr>
+<tr><td>“has keyframes starting after 0”</td><td>Add a key at frame 0 (rest pose). <span class="pill v">manual</span></td></tr>
+<tr><td>“incorrect number of times … and transforms”</td><td>Broken FBX bake; re-export with all channels keyed on every frame (“force start/end keying”). <span class="pill v">manual</span></td></tr>
+<tr><td>Part shows in both directions</td><td>Only the <code>_on</code> or only the <code>_off</code> event exists; both are required. <span class="pill v">manual</span></td></tr>
+<tr><td>Same mesh needed at both ends</td><td>Duplicate the object: one instance per purpose. <span class="pill v">manual</span></td></tr>
+<tr><td>Wheels spin twice as fast</td><td>Node is both in <code>axles</code> and keyed under <code>wheels</code>/<code>drive</code>. <span class="pill u">check</span></td></tr>
+<tr><td>Doors open before the train stops / passengers board through closed doors</td><td><code>arrivalDelay</code>/<code>departureDelay</code> shorter than the animation. <span class="pill v">manual</span></td></tr>
+</tbody></table>
+
+</body></html>
