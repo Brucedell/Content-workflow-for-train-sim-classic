@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Store Part 4 — The Interactive Viewer</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Online Store · Vehicle Workflow Guide</div>
+    <div class="partno">Part 4</div>
+    <h1>The interactive viewer: load, orbit, click, play</h1>
+    <div class="sub">The landing-page element you asked for: a random vehicle appears, the visitor spins it, clicks a door or a pantograph and it moves. This part
+      shows the finished demo, then reads its one script file aloud in Blender terms. You do not need to write it; you need to know which lines to change.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>What the visitor sees</li>
+    <li>The viewer in Blender terms</li>
+    <li>Three files make the viewer</li>
+    <li>Setting up the viewport: renderer, scene, camera, lights</li>
+    <li>Loading a vehicle and its animations</li>
+    <li>Framing the model (View Selected)</li>
+    <li>Clicking a part: the raycast</li>
+    <li>Playing an animation forward and backward</li>
+    <li>Hover labels and the button list</li>
+    <li>The random pool and “another vehicle”</li>
+    <li>Alternatives that need no code</li>
+    <li>When it does not work</li>
+  </ol></div>
+  <div class="foot">Every screenshot in this part was taken from <code>store-demo/</code> in a headless Chromium with WebGL, driven by the test script in
+  <code>store-demo/test/drive.js</code> (<span class="pill v">demo</span>). No page errors were reported during the run.</div>
+</section>
+
+<h1>1 · What the visitor sees</h1>
+<figure>
+<img src="img/landing-full.png" alt="The demo landing page: dark header, 3D stage with the locomotive, side panel with hotspot buttons, catalogue cards below" style="width:150mm">
+<figcaption><b>Figure 4.1 · The demo landing page, full length.</b> Header with the catalogue sections, the hero with the 3D stage on the left and the featured-vehicle
+panel on the right (title, blurb, one button per clickable part, price), then the catalogue cards. The two lit buttons are the parts that are currently “open”.</figcaption>
+</figure>
+
+<div class="two">
+<figure><img src="img/viewer-01-loaded.png" alt="Viewer just loaded: locomotive framed three-quarter front, status line shows 816 triangles, 7 animations" style="width:84mm">
+<figcaption><b>Figure 4.2 · Just loaded.</b> The model is framed automatically; the status line reports triangles and animation count.</figcaption></figure>
+<figure><img src="img/viewer-03-door-open.png" alt="Same view after clicking the right-hand door: the door leaf is swung open" style="width:84mm">
+<figcaption><b>Figure 4.3 · After one click on the door.</b> The door clip played once and stays open (clamped). A second click plays it backwards.</figcaption></figure>
+</div>
+<figure>
+<img src="img/viewer-02-hover.png" alt="Pointer over the door shows a yellow 'Door R1' label next to the cursor" style="width:160mm">
+<figcaption><b>Figure 4.4 · Hovering.</b> The pointer is over a hotspot, so the cursor becomes a hand and the part's label follows it. The label text comes straight from
+the <code>web_label</code> property you set in Blender (Part&nbsp;3 §5).</figcaption></figure>
+<figure>
+<img src="img/viewer-04-panto-up.png" alt="Front pantograph raised and left door open after clicking the pantograph base and the Door L1 button" style="width:84mm">
+<figcaption><b>Figure 4.5 · Two more triggers.</b> The front pantograph was clicked on its <em>base</em> (a <code>web_hotspot</code> stand-in for the thin arms) and the
+left door was opened from its button. Both arms moved together because they share one animation name.</figcaption></figure>
+
+<h1>2 · The viewer in Blender terms</h1>
+<p>The viewer is built on <b>three.js</b>, a free JavaScript library that is, for your purposes, a tiny Blender viewport that runs inside a web page. Every object
+in the script has a Blender equivalent:</p>
+<table>
+<thead><tr><th style="width:42mm">In the script</th><th style="width:48mm">In Blender</th><th>What it does here</th></tr></thead>
+<tbody>
+<tr><td><code>WebGLRenderer</code></td><td>The 3D viewport (Eevee)</td><td>Draws into the <code>&lt;canvas&gt;</code> element on the page, 60 times a second.</td></tr>
+<tr><td><code>Scene</code></td><td>The scene / outliner</td><td>Holds the model, lights and the shadow ground.</td></tr>
+<tr><td><code>PerspectiveCamera</code></td><td>The viewport camera</td><td>35° lens, like a 50 mm; aspect follows the canvas size.</td></tr>
+<tr><td><code>OrbitControls</code></td><td>Middle-mouse orbit, scroll zoom, shift-pan</td><td>Drag to orbit, wheel to zoom; limited so it never goes under the rails.</td></tr>
+<tr><td><code>HemisphereLight</code>, <code>DirectionalLight</code></td><td>World sky colour + a Sun lamp</td><td>Soft fill plus a shadow-casting key light.</td></tr>
+<tr><td><code>GLTFLoader</code></td><td>File ▸ Import ▸ glTF</td><td>Reads your .glb, meshes, materials, node names and animations.</td></tr>
+<tr><td><code>AnimationMixer</code> / <code>AnimationAction</code></td><td>The NLA editor playing one strip</td><td>One action per named clip; told to play once and hold the last frame.</td></tr>
+<tr><td><code>Raycaster</code></td><td>Left-click select in the viewport</td><td>Finds the mesh under the mouse so a click can pick a hotspot.</td></tr>
+<tr><td><code>Box3</code></td><td>Bounding box / View Selected</td><td>Measures the model to place the camera.</td></tr>
+<tr><td><code>requestAnimationFrame</code></td><td>Play (the timeline running)</td><td>Asks the browser to draw the next frame; the loop never stops.</td></tr>
+</tbody></table>
+
+<h1>3 · Three files make the viewer</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="20" width="200" height="190" rx="7" fill="#f4f6f9" stroke="#8a96a6"/>
+  <text x="110" y="40" text-anchor="middle" font-weight="bold">index.html · the page</text>
+  <text x="22" y="60">header, hero, cards, footer (text)</text>
+  <text x="22" y="76" font-family="DejaVu Sans Mono" font-size="8.5">&lt;canvas id="viewer"&gt;</text>
+  <text x="22" y="92" font-family="DejaVu Sans Mono" font-size="8.5">&lt;div id="hotspots"&gt;</text>
+  <text x="22" y="108" font-family="DejaVu Sans Mono" font-size="8.5">window.MODEL_POOL = [...]</text>
+  <text x="22" y="124" font-family="DejaVu Sans Mono" font-size="8.5">importmap: "three" → vendor/</text>
+  <text x="22" y="140" font-family="DejaVu Sans Mono" font-size="8.5">&lt;script src="js/viewer.js"&gt;</text>
+  <text x="22" y="170" fill="#5b6676">css/site.css = colours, layout</text>
+  <text x="22" y="186" fill="#5b6676">(the “material” of the page)</text>
+
+  <rect x="260" y="20" width="200" height="190" rx="7" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.8"/>
+  <text x="360" y="40" text-anchor="middle" font-weight="bold">js/viewer.js · the script</text>
+  <text x="272" y="60">sets up viewport + lights</text>
+  <text x="272" y="76">load(manifest) → GLTFLoader</text>
+  <text x="272" y="92">frameModel() → camera</text>
+  <text x="272" y="108">buildHotspotList() → buttons</text>
+  <text x="272" y="124">pick(mouse) → raycast</text>
+  <text x="272" y="140">trigger(node) → play clip</text>
+  <text x="272" y="156">animate() → draw every frame</text>
+  <text x="272" y="186" fill="#5b6676">225 lines, the only code you own</text>
+
+  <rect x="510" y="20" width="200" height="80" rx="7" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="610" y="40" text-anchor="middle" font-weight="bold">models/&lt;name&gt;.glb</text>
+  <text x="522" y="58">meshes, materials, node names,</text><text x="522" y="72">named animation clips</text>
+  <text x="522" y="90" fill="#5b6676">from Blender (Part 3)</text>
+  <rect x="510" y="120" width="200" height="90" rx="7" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="610" y="140" text-anchor="middle" font-weight="bold">models/&lt;name&gt;.manifest.json</text>
+  <text x="522" y="158">title, blurb, triangles,</text><text x="522" y="172">hotspots: node → label → clip</text>
+  <text x="522" y="186" fill="#5b6676">written by the add-on (Part 7)</text>
+  <text x="522" y="200" fill="#5b6676">or by hand in a text editor</text>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#a4)"><path d="M210,140 L258,140"/><path d="M460,76 L508,60"/><path d="M460,76 L508,160"/></g>
+  <text x="235" y="134" text-anchor="middle" font-size="8.5" fill="#5b6676">runs</text>
+  <text x="484" y="52" text-anchor="middle" font-size="8.5" fill="#5b6676">fetches</text>
+</svg>
+<figcaption><b>Figure 4.6 · What talks to what.</b> The page gives the script a canvas and a list of manifests; the script fetches a manifest, then the .glb it names.
+Add a vehicle = export two files into <code>models/</code> and add one line to the pool. Nothing in the script changes.</figcaption>
+</figure>
+
+<div class="box tip"><span class="t">Why a manifest at all?</span><p>The .glb knows node names and clip names but not which nodes are <em>clickable</em>, what to call them
+on screen, or that clicking a pantograph base should play the arms' clip. That mapping is the manifest, and the add-on writes it from the custom properties you set
+in Blender. The viewer stays generic; the vehicle brings its own instructions.</p></div>
+
+<h1>4 · Setting up the viewport</h1>
+<p>The first forty lines of <code>viewer.js</code> are the equivalent of opening a new .blend and arranging a viewport, a camera, a sun and a shadow catcher.</p>
+<pre><span class="c">// the viewport: draws into the canvas, with antialiasing, a transparent background and shadows</span>
+<span class="k">const</span> renderer = <span class="k">new</span> THREE.WebGLRenderer({ canvas, antialias: <span class="k">true</span>, alpha: <span class="k">true</span> });
+renderer.outputColorSpace = THREE.SRGBColorSpace;      <span class="c">// colour management: Standard view transform</span>
+renderer.toneMapping = THREE.ACESFilmicToneMapping;    <span class="c">// Filmic look</span>
+renderer.shadowMap.enabled = <span class="k">true</span>;
+
+<span class="k">const</span> scene  = <span class="k">new</span> THREE.Scene();
+<span class="k">const</span> camera = <span class="k">new</span> THREE.PerspectiveCamera(<span class="s">35</span>, <span class="s">1</span>, <span class="s">0.1</span>, <span class="s">500</span>);   <span class="c">// FOV, aspect, clip start, clip end</span>
+<span class="k">const</span> controls = <span class="k">new</span> OrbitControls(camera, canvas);        <span class="c">// MMB orbit / wheel zoom</span>
+controls.maxPolarAngle = Math.PI * <span class="s">0.49</span>;                   <span class="c">// never look up from under the rails</span>
+
+scene.add(<span class="k">new</span> THREE.HemisphereLight(<span class="s">0xdfe9ff</span>, <span class="s">0x303030</span>, <span class="s">1.1</span>)); <span class="c">// sky / ground fill</span>
+<span class="k">const</span> sun = <span class="k">new</span> THREE.DirectionalLight(<span class="s">0xffffff</span>, <span class="s">2.2</span>);        <span class="c">// Sun lamp</span>
+sun.position.set(<span class="s">12</span>, <span class="s">18</span>, <span class="s">10</span>); sun.castShadow = <span class="k">true</span>;
+
+<span class="k">const</span> ground = <span class="k">new</span> THREE.Mesh(<span class="k">new</span> THREE.CircleGeometry(<span class="s">60</span>, <span class="s">64</span>),
+                              <span class="k">new</span> THREE.ShadowMaterial({ opacity: <span class="s">0.35</span> })); <span class="c">// shadow catcher</span>
+ground.rotation.x = -Math.PI / <span class="s">2</span>;                           <span class="c">// lie flat (three.js is Y-up)</span></pre>
+<table>
+<thead><tr><th style="width:52mm">Want to change…</th><th>Edit this</th></tr></thead>
+<tbody>
+<tr><td>Lens / how close it feels</td><td>The first number in <code>PerspectiveCamera(35, …)</code>: 25 is a long lens, 50 is wide.</td></tr>
+<tr><td>Light direction or strength</td><td><code>sun.position.set(x, y, z)</code> and the second argument of <code>DirectionalLight</code>. Remember Y is up.</td></tr>
+<tr><td>Shadow darkness</td><td><code>ShadowMaterial opacity</code>, 0 to 1.</td></tr>
+<tr><td>Allow looking from below</td><td>Raise <code>maxPolarAngle</code> toward <code>Math.PI</code>.</td></tr>
+<tr><td>Background</td><td>It is transparent (<code>alpha: true</code>), so the CSS gradient behind the canvas shows; change it in <code>site.css</code> under <code>.stage</code>.</td></tr>
+</tbody></table>
+
+<h1>5 · Loading a vehicle and its animations</h1>
+<pre><span class="k">async function</span> load(manifestUrl) {
+  manifest = <span class="k">await</span> (<span class="k">await</span> fetch(manifestUrl)).json();           <span class="c">// read the small JSON first</span>
+  <span class="k">const</span> gltf = <span class="k">await new</span> GLTFLoader().loadAsync(base + manifest.model); <span class="c">// File ▸ Import ▸ glTF</span>
+  model = gltf.scene;  scene.add(model);
+  model.traverse(o =&gt; { <span class="k">if</span> (o.isMesh) { o.castShadow = o.receiveShadow = <span class="k">true</span>; } });
+
+  mixer = <span class="k">new</span> THREE.AnimationMixer(model);                   <span class="c">// the NLA editor for this model</span>
+  <span class="k">for</span> (<span class="k">const</span> clip <span class="k">of</span> gltf.animations) {                      <span class="c">// one clip per NLA track you exported</span>
+    <span class="k">const</span> a = mixer.clipAction(clip);
+    a.setLoop(THREE.LoopOnce, <span class="s">1</span>);                            <span class="c">// play once, not cyclic</span>
+    a.clampWhenFinished = <span class="k">true</span>;                              <span class="c">// hold the last frame (door stays open)</span>
+    actions.set(clip.name, a);                               <span class="c">// look up by the strip name</span>
+  }
+  <span class="k">for</span> (<span class="k">const</span> h <span class="k">of</span> manifest.hotspots) hotspotByNode.set(h.node, h);
+  frameModel(); buildHotspotList();
+}</pre>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="220" height="110" rx="6" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="120" y="40" text-anchor="middle" font-weight="bold">Blender NLA editor</text>
+  <rect x="24" y="52" width="190" height="14" fill="#fff" stroke="#a86400"/><text x="30" y="63" font-size="8.5">track open_door_l1 ▮▮▮▮▮▮</text>
+  <rect x="24" y="72" width="190" height="14" fill="#fff" stroke="#a86400"/><text x="30" y="83" font-size="8.5">track raise_panto_front ▮▮▮▮▮▮▮▮</text>
+  <rect x="24" y="92" width="190" height="14" fill="#fff" stroke="#a86400"/><text x="30" y="103" font-size="8.5">track wipers ▮▮▮▮</text>
+  <text x="120" y="124" text-anchor="middle" font-size="8.5" fill="#5b6676">export: Group by NLA Track</text>
+  <text x="265" y="80" font-size="18" fill="#5b6676">→</text>
+  <rect x="300" y="20" width="180" height="110" rx="6" fill="#f4f6f9" stroke="#8a96a6"/>
+  <text x="390" y="40" text-anchor="middle" font-weight="bold">.glb animations[]</text>
+  <text x="312" y="62" font-family="DejaVu Sans Mono" font-size="8.5">"open_door_l1"</text>
+  <text x="312" y="80" font-family="DejaVu Sans Mono" font-size="8.5">"raise_panto_front"</text>
+  <text x="312" y="98" font-family="DejaVu Sans Mono" font-size="8.5">"wipers"</text>
+  <text x="390" y="124" text-anchor="middle" font-size="8.5" fill="#5b6676">names survive unchanged</text>
+  <text x="515" y="80" font-size="18" fill="#5b6676">→</text>
+  <rect x="540" y="20" width="170" height="110" rx="6" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="625" y="40" text-anchor="middle" font-weight="bold">actions Map</text>
+  <text x="552" y="62" font-size="8.5">open_door_l1 → Action</text>
+  <text x="552" y="80" font-size="8.5">raise_panto_front → Action</text>
+  <text x="552" y="98" font-size="8.5">wipers → Action</text>
+  <text x="625" y="124" text-anchor="middle" font-size="8.5" fill="#5b6676">manifest names these</text>
+</svg>
+<figcaption><b>Figure 4.7 · A clip's name is its address.</b> The NLA track name in Blender becomes the glTF animation name, which is what the manifest's
+<code>animations</code> list and the viewer's <code>actions</code> map use. Rename a track and you must rename it in the manifest too (the add-on does both).</figcaption>
+</figure>
+
+<h1>6 · Framing the model</h1>
+<p><code>frameModel()</code> is Numpad&nbsp;. (View Selected) written out: measure the bounding box, drop the model so its lowest point sits on the shadow ground,
+put the camera on a three-quarter diagonal at a distance set by the longest side, and aim the orbit at the centre.</p>
+<pre><span class="k">const</span> box = <span class="k">new</span> THREE.Box3().setFromObject(model);
+<span class="k">const</span> size = box.getSize(<span class="k">new</span> THREE.Vector3()), center = box.getCenter(<span class="k">new</span> THREE.Vector3());
+model.position.y -= box.min.y;                            <span class="c">// rails on the ground plane</span>
+<span class="k">const</span> radius = Math.max(size.x, size.y, size.z);
+camera.position.set(center.x + radius * <span class="s">0.9</span>, center.y + radius * <span class="s">0.45</span>, center.z + radius * <span class="s">0.9</span>);
+controls.target.copy(center);
+controls.minDistance = radius * <span class="s">0.3</span>;  controls.maxDistance = radius * <span class="s">3</span>;   <span class="c">// zoom limits</span></pre>
+<p>Because the camera is placed from the measured size, a 10 m streetcar and a 25 m locomotive both fill the stage. To favour the front, lower the <code>z</code>
+multiplier; the demo model's front faces −Z in glTF (that is +Y in Blender, Part&nbsp;3).</p>
+
+<h1>7 · Clicking a part: the raycast</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="r4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/></marker></defs>
+  <rect x="10" y="10" width="330" height="210" rx="6" fill="#0f1419"/>
+  <text x="175" y="28" text-anchor="middle" fill="#93a1b1" font-size="8.5">the canvas (what the visitor sees)</text>
+  <!-- loco silhouette -->
+  <rect x="60" y="90" width="230" height="70" rx="6" fill="#b86b12"/>
+  <rect x="90" y="100" width="30" height="25" fill="#5f7d99"/><rect x="200" y="100" width="30" height="25" fill="#5f7d99"/>
+  <rect x="262" y="100" width="14" height="50" fill="#2a2a2c" stroke="#3a7bd5" stroke-width="1.5"/>
+  <circle cx="100" cy="166" r="9" fill="#9a9a9c"/><circle cx="130" cy="166" r="9" fill="#9a9a9c"/><circle cx="220" cy="166" r="9" fill="#9a9a9c"/><circle cx="250" cy="166" r="9" fill="#9a9a9c"/>
+  <!-- cursor and ray -->
+  <path d="M268,118 l0,14 l4,-3 l3,6 l3,-2 l-3,-6 l5,0 z" fill="#fff" stroke="#000" stroke-width="0.6"/>
+  <text x="300" y="80" fill="#ffc83d" font-weight="bold" font-size="8.5">pointer</text>
+  <circle cx="269" cy="125" r="3" fill="#ffc83d"/>
+  <!-- right: explanation -->
+  <text x="360" y="30" font-weight="bold">pick(ev)</text>
+  <text x="360" y="48">1 · mouse x,y → canvas −1…+1 coordinates</text>
+  <text x="360" y="66">2 · Raycaster.setFromCamera(pointer, camera)</text>
+  <text x="372" y="80" fill="#5b6676" font-size="8.5">a ray from the eye through the pixel</text>
+  <text x="360" y="98">3 · intersectObject(model) → hits, nearest first</text>
+  <text x="360" y="116">4 · walk up parents until a hotspot node</text>
+  <rect x="372" y="126" width="330" height="60" rx="5" fill="#f4f6f9" stroke="#8a96a6"/>
+  <text x="382" y="142" font-family="DejaVu Sans Mono" font-size="8.5">hit: 1_0128_panto01_head   (not a hotspot)</text>
+  <text x="382" y="156" font-family="DejaVu Sans Mono" font-size="8.5">parent: 1_0128_panto01_part02  (web_anim ✓) → found</text>
+  <text x="382" y="174" font-size="8.5" fill="#5b6676">so clicking the head still raises the pantograph</text>
+  <text x="360" y="206">5 · return the node name, or null</text>
+  <path d="M345,125 L270,125" stroke="#c0392b" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#r4)"/>
+</svg>
+<figcaption><b>Figure 4.8 · One click, one ray.</b> This is exactly what Blender does when you left-click in the viewport: shoot a ray from the camera through the
+pixel and take the first face it hits. The extra step is walking <em>up</em> the hierarchy, so clicking any child of a hotspot counts (a pantograph head, a door handle).</figcaption>
+</figure>
+<pre><span class="k">function</span> pick(ev) {
+  <span class="k">const</span> r = canvas.getBoundingClientRect();
+  pointer.x =  ((ev.clientX - r.left) / r.width)  * <span class="s">2</span> - <span class="s">1</span>;   <span class="c">// pixel → −1…+1</span>
+  pointer.y = -((ev.clientY - r.top)  / r.height) * <span class="s">2</span> + <span class="s">1</span>;
+  raycaster.setFromCamera(pointer, camera);
+  <span class="k">for</span> (<span class="k">const</span> hit <span class="k">of</span> raycaster.intersectObject(model, <span class="k">true</span>)) {
+    <span class="k">let</span> o = hit.object;
+    <span class="k">while</span> (o) { <span class="k">if</span> (hotspotByNode.has(o.name)) <span class="k">return</span> o.name; o = o.parent; }
+  }
+  <span class="k">return null</span>;
+}</pre>
+<p><b>Click or drag?</b> Orbiting also starts with a mouse-down on the canvas. The viewer records where the button went down and, on release, ignores anything that
+moved more than six pixels: that was an orbit, not a click. Blender does the same distinction between click-select and drag-box.</p>
+
+<h1>8 · Playing an animation forward and backward</h1>
+<pre><span class="k">function</span> trigger(nodeName) {
+  <span class="k">const</span> h = hotspotByNode.get(nodeName);                 <span class="c">// manifest entry for this node</span>
+  <span class="k">for</span> (<span class="k">const</span> name <span class="k">of</span> h.animations) {
+    <span class="k">const</span> a = actions.get(name);
+    <span class="k">const</span> forward = !playing.get(name);                  <span class="c">// closed → open, open → closed</span>
+    a.reset();
+    a.timeScale = forward ? <span class="s">1</span> : -<span class="s">1</span>;                      <span class="c">// −1 = play the strip backwards</span>
+    <span class="k">if</span> (!forward) a.time = a.getClip().duration;         <span class="c">// start from the last frame</span>
+    a.play();
+    playing.set(name, forward);
+  }
+  flash(nodeName);                                       <span class="c">// brief blue emissive on the part</span>
+  hotspotList.querySelector(<span class="s">`[data-label="${h.label}"]`</span>)?.classList.toggle(<span class="s">'active'</span>);
+}</pre>
+<figure>
+<svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <text x="10" y="22" font-weight="bold">One clip, two directions</text>
+  <rect x="10" y="34" width="320" height="26" rx="4" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="20" y="51">1st click · timeScale +1 · frame 0 → 24 · clamp at 24 = open</text>
+  <rect x="10" y="70" width="320" height="26" rx="4" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="20" y="87">2nd click · timeScale −1 · frame 24 → 0 · clamp at 0 = closed</text>
+  <text x="360" y="22" font-weight="bold">Why this matters for you in Blender</text>
+  <text x="360" y="42">• key only the <b>opening</b> motion; the close is free</text>
+  <text x="360" y="58">• frame 0 must be the rest pose (closed, lowered, parked)</text>
+  <text x="360" y="74">• a cyclic clip (wipers) just plays once per click; make the</text>
+  <text x="372" y="88">  action end where it started so the reverse is invisible</text>
+  <text x="360" y="108" fill="#5b6676" font-size="8.5">same rule as TSC's control-value driven animations and TF3's open_doors events</text>
+</svg>
+<figcaption><b>Figure 4.9 · The toggle.</b> Reversing is done by playing the same clip at speed −1, so there is never a separate “close” animation to export.</figcaption>
+</figure>
+
+<h1>9 · Hover labels and the button list</h1>
+<p>Two small conveniences make the stage feel alive. On every mouse move the viewer runs the same <code>pick()</code>; if a hotspot is under the pointer, the cursor
+becomes a hand and a small label (the manifest's <code>label</code>) is placed 12 px from the pointer (Figure&nbsp;4.4). And <code>buildHotspotList()</code> creates
+one button per <em>distinct label</em> in the manifest, so a visitor who cannot find the tiny wiper can still press “Wipers”. Several nodes may share a label (two
+pantograph arms; the base and the arm); the first one becomes the button's target and all of them play the same clip.</p>
+<div class="box tip"><span class="t">Trigger from the copy</span><p>The viewer exposes <code>window.viewer.trigger('1_0128_panto01_part01')</code>, so a sentence in your
+product text can carry a link that raises the pantograph: <code>&lt;a href="#" onclick="viewer.trigger('…'); return false"&gt;raise the pantograph&lt;/a&gt;</code>.
+That is the “test physics triggers in the browser” idea from the opportunity analysis, done with one line.</p></div>
+
+<h1>10 · The random pool and “another vehicle”</h1>
+<pre><span class="c">// index.html</span>
+window.MODEL_POOL = [
+  <span class="s">"models/sample_electric.manifest.json"</span>,
+  <span class="s">"models/pcc_streetcar.manifest.json"</span>,        <span class="c">// add one line per vehicle</span>
+];
+<span class="c">// viewer.js</span>
+<span class="k">async function</span> loadRandom() { <span class="k">await</span> load(POOL[Math.floor(Math.random() * POOL.length)]); }</pre>
+<p>That is the whole “random model on every visit” feature. The ⟳ button calls the same function. If you prefer a daily feature instead of random, replace the
+random index with <code>new Date().getDate() % POOL.length</code>. To open a product page with <em>its</em> vehicle, give the page the same viewer and a pool of one.</p>
+
+<h1>11 · Alternatives that need no code</h1>
+<table>
+<thead><tr><th style="width:40mm">Option</th><th style="width:60mm">What you get</th><th>What you lose</th></tr></thead>
+<tbody>
+<tr><td><code>&lt;model-viewer&gt;</code> (Google's web component)</td><td>One HTML tag shows a .glb with orbit, auto-rotate, AR on phones; annotation hotspots with text.</td><td>Hotspots open text, they do not play a chosen clip on click without extra script; one animation at a time.</td></tr>
+<tr><td>Sketchfab embed</td><td>Upload the .glb, paste an iframe. Hosting and viewer are theirs; annotations and a single animation timeline.</td><td>No click-to-animate per part; their branding; your model lives on their server.</td></tr>
+<tr><td>Turntable video / image sequence</td><td>Render in Blender, no browser 3D at all.</td><td>Nothing to click; large files for many vehicles.</td></tr>
+<tr><td><b>This viewer</b> (three.js, 225 lines)</td><td>Click any part, play any clip, reverse, labels, random pool, your look.</td><td>You host the library files; one script to keep.</td></tr>
+</tbody></table>
+<p>The demo viewer is recommended because it is the only one of the four that does what you asked for. The others are fine for product pages where a spin is enough.</p>
+
+<h1>12 · When it does not work</h1>
+<table>
+<thead><tr><th style="width:52mm">Symptom</th><th>Cause and fix</th></tr></thead>
+<tbody>
+<tr><td>Blank stage, console says “Failed to resolve module specifier three”</td><td>The import map is missing or the vendor path is wrong. Check the <code>importmap</code> block in <code>index.html</code> and that <code>vendor/three.module.js</code> exists.</td></tr>
+<tr><td>Blank stage when opening the file by double-click</td><td>Browsers block module scripts and fetch from <code>file://</code>. Use the local server (Part&nbsp;5 §1).</td></tr>
+<tr><td>Model loads, click does nothing</td><td>Node names in the manifest do not match the .glb (renamed in Blender after export, or “.001” suffix). Re-export with the add-on; it writes both.</td></tr>
+<tr><td>“no animation named …” in the console</td><td>The NLA track name differs from the manifest's animation name, or the action was not pushed to a strip.</td></tr>
+<tr><td>Part moves but from the wrong hinge</td><td>Origin not on the hinge in Blender; the clip rotates about the object's origin.</td></tr>
+<tr><td>Door opens on the first click and jumps on the second</td><td>Frame 0 is not the rest pose, or the clip has keys after the last visible change. Trim the action to the motion.</td></tr>
+<tr><td>Model black or pink</td><td>Material has no base colour / texture path broken at export. Pack textures into the .glb (Automatic image format does).</td></tr>
+<tr><td>Model lying on its side</td><td>Exported without <b>+Y up</b>. Re-export; do not rotate in the viewer.</td></tr>
+<tr><td>Slow orbit on a laptop</td><td>Over the triangle or texture budget (Part&nbsp;3 §2); the status line shows triangles.</td></tr>
+</tbody></table>
+
+</body></html>

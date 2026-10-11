@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Store Part 2 — Site Map and Content</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Online Store · Vehicle Workflow Guide</div>
+    <div class="partno">Part 2</div>
+    <h1>Site map and content: every page and what goes on it</h1>
+    <div class="sub">The pages, the words, the product-page anatomy, the legal footnote, demo tiers and pre-order blocks. Written so you can fill a template
+      rather than face a blank page.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Site map</li>
+    <li>The landing page, block by block</li>
+    <li>Anatomy of a product page</li>
+    <li>Writing the copy: a formula</li>
+    <li>Naming products safely</li>
+    <li>Demos, proving grounds and pre-orders</li>
+    <li>Dev log, docs and support</li>
+    <li>Images and video to prepare</li>
+    <li>Content checklist per product</li>
+  </ol></div>
+  <div class="foot">Layout, navigation, the technical spec grid, the copy example and the community-first footnote follow the opportunity analysis (“What exactly would my
+  3rd party store website look like?”). Naming guidance follows its copyright sections; it is not legal advice.</div>
+</section>
+
+<h1>1 · Site map</h1>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <g stroke="#8a96a6" fill="none"><path d="M360,52 V76"/><path d="M80,76 H640"/><path d="M80,76 V96"/><path d="M220,76 V96"/><path d="M360,76 V96"/><path d="M500,76 V96"/><path d="M640,76 V96"/>
+  <path d="M80,136 V156"/><path d="M220,136 V156"/><path d="M360,136 V156"/><path d="M500,136 V156"/><path d="M640,136 V156"/><path d="M80,196 V216"/><path d="M220,196 V216"/><path d="M640,196 V216"/></g>
+  <rect x="280" y="16" width="160" height="36" rx="6" fill="#16324f"/><text x="360" y="39" text-anchor="middle" fill="#fff" font-weight="bold">Landing (3D hero)</text>
+  <g>
+    <rect x="20" y="96" width="120" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="80" y="120" text-anchor="middle" font-weight="bold">Routes</text>
+    <rect x="160" y="96" width="120" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="220" y="120" text-anchor="middle" font-weight="bold">Traction</text>
+    <rect x="300" y="96" width="120" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="360" y="120" text-anchor="middle" font-weight="bold">Rolling stock</text>
+    <rect x="440" y="96" width="120" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="500" y="120" text-anchor="middle" font-weight="bold">Transit demos</text>
+    <rect x="580" y="96" width="120" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="640" y="120" text-anchor="middle" font-weight="bold">Core logs</text>
+    <rect x="20" y="156" width="120" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="80" y="174" text-anchor="middle">product page</text><text x="80" y="188" text-anchor="middle" fill="#5b6676">per route</text>
+    <rect x="160" y="156" width="120" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="220" y="174" text-anchor="middle">product page</text><text x="220" y="188" text-anchor="middle" fill="#5b6676">per loco / MU</text>
+    <rect x="300" y="156" width="120" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="360" y="174" text-anchor="middle">product page</text><text x="360" y="188" text-anchor="middle" fill="#5b6676">per wagon set</text>
+    <rect x="440" y="156" width="120" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="500" y="174" text-anchor="middle">product page</text><text x="500" y="188" text-anchor="middle" fill="#5b6676">$10 micro-routes</text>
+    <rect x="580" y="156" width="120" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="640" y="174" text-anchor="middle">dev log posts</text><text x="640" y="188" text-anchor="middle" fill="#5b6676">updates, patch notes</text>
+    <rect x="20" y="216" width="120" height="40" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="80" y="234" text-anchor="middle">Greenlight /</text><text x="80" y="248" text-anchor="middle">pre-order block</text>
+    <rect x="160" y="216" width="120" height="40" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="220" y="234" text-anchor="middle">Framework page</text><text x="220" y="248" text-anchor="middle" fill="#5b6676">what every loco shares</text>
+    <rect x="580" y="216" width="120" height="40" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="640" y="234" text-anchor="middle">Docs · Support ·</text><text x="640" y="248" text-anchor="middle">Compatibility board</text>
+  </g>
+  <rect x="300" y="236" width="120" height="40" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="360" y="254" text-anchor="middle" font-weight="bold">My depot ↗</text><text x="360" y="268" text-anchor="middle" fill="#5b6676">provider library</text>
+  <text x="360" y="292" text-anchor="middle" fill="#5b6676">Menu order from the analysis: ROUTES · TRACK TRACTION · ROLLING STOCK · TRANSIT DEMOS · CORE LOGS, plus the account link.</text>
+</svg>
+<figcaption><b>Figure 2.1 · The site map.</b> Five menu items keep a growing catalogue readable; every leaf is a product page built from the same template.</figcaption>
+</figure>
+
+<h1>2 · The landing page, block by block</h1>
+<figure>
+<svg viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="60" y="10" width="600" height="310" rx="6" fill="#0f1419" stroke="#2a3542"/>
+  <rect x="60" y="10" width="600" height="26" fill="#161d25"/><text x="72" y="27" fill="#e8edf2" font-weight="bold" font-size="9">◆ STUDIO NAME</text><text x="640" y="27" text-anchor="end" fill="#ffc83d" font-size="8.5">Routes · Traction · Stock · Demos · Log · My depot</text>
+  <rect x="72" y="46" width="360" height="150" rx="4" fill="#1b242e" stroke="#2a3542"/><text x="252" y="125" text-anchor="middle" fill="#93a1b1">① 3D viewer (random vehicle)</text><text x="252" y="141" text-anchor="middle" fill="#93a1b1" font-size="8.5">drag · zoom · click parts</text>
+  <rect x="444" y="46" width="204" height="150" rx="4" fill="#1b242e" stroke="#2a3542"/><text x="454" y="64" fill="#ffc83d" font-size="8">FEATURED VEHICLE</text><text x="454" y="80" fill="#e8edf2" font-weight="bold">② Title + blurb</text><text x="454" y="100" fill="#93a1b1" font-size="8.5">③ hotspot buttons</text><rect x="454" y="106" width="46" height="12" rx="6" fill="#161d25" stroke="#2a3542"/><rect x="504" y="106" width="56" height="12" rx="6" fill="#161d25" stroke="#2a3542"/><rect x="564" y="106" width="40" height="12" rx="6" fill="#161d25" stroke="#2a3542"/><text x="454" y="140" fill="#e8edf2" font-weight="bold">$15.00</text><rect x="500" y="130" width="56" height="14" rx="2" fill="#3a7bd5"/><text x="528" y="140" text-anchor="middle" fill="#fff" font-size="8">Add to cart</text><text x="454" y="166" fill="#93a1b1" font-size="7.5">④ community-first legal footnote</text>
+  <rect x="72" y="206" width="576" height="46" rx="4" fill="#161d25" stroke="#2a3542"/><text x="84" y="224" fill="#e8edf2" font-weight="bold" font-size="9">⑤ Framework strip</text><text x="84" y="240" fill="#93a1b1" font-size="8.5">thermal brake fade · axle journals · voltage switching · trolley poles — one framework across every vehicle</text>
+  <rect x="72" y="262" width="184" height="46" rx="4" fill="#1b242e" stroke="#2a3542"/><rect x="268" y="262" width="184" height="46" rx="4" fill="#1b242e" stroke="#2a3542"/><rect x="464" y="262" width="184" height="46" rx="4" fill="#1b242e" stroke="#2a3542"/>
+  <text x="164" y="289" text-anchor="middle" fill="#93a1b1">⑥ catalogue cards</text><text x="360" y="289" text-anchor="middle" fill="#93a1b1">latest release</text><text x="556" y="289" text-anchor="middle" fill="#93a1b1">greenlight projects</text>
+</svg>
+<figcaption><b>Figure 2.2 · Landing page blocks</b> (the demo site implements ①–④ and ⑥ <span class="pill v">demo</span>). ① proves the craft; ② names it; ③ lets the visitor
+<em>operate</em> it; ④ reassures community painters; ⑤ sells the thing every product shares; ⑥ routes into the catalogue.</figcaption>
+</figure>
+
+<h1>3 · Anatomy of a product page</h1>
+<table>
+<thead><tr><th style="width:40mm">Block</th><th>Content</th><th style="width:40mm">Source</th></tr></thead>
+<tbody>
+<tr><td>Header</td><td>Title using the design name · price · Add to cart (links to the provider) · “Interactive preview” viewer with the product's own hotspots</td><td>Analysis “Product Header”; Part&nbsp;4 viewer</td></tr>
+<tr><td>Technical spec grid</td><td>Subsystem · Deployment state · Core mechanics engaged. Rows such as Propulsion profile / Thermal degradation / Lubrication tracking / Audio environment</td><td>Analysis “The Technical Spec Grid”</td></tr>
+<tr><td>Copy</td><td>Three paragraphs: the machine, the challenge, the framework (see §4)</td><td>Analysis “Selling the Challenge”</td></tr>
+<tr><td>Media</td><td>6–10 screenshots, one 20–30 s silent loop, optional cab tour video</td><td>§8</td></tr>
+<tr><td>Requirements</td><td>Game and version, DLC dependencies, disk space, framework version</td><td>Your installer</td></tr>
+<tr><td>Installation</td><td>Steps for the installer; where files land; how to verify</td><td>Part&nbsp;6</td></tr>
+<tr><td>Version and changelog</td><td>Current version, date, last three changes, link to the dev log</td><td>Part&nbsp;6</td></tr>
+<tr><td>Community-first footnote</td><td>The standard disclaimer (§5)</td><td>Analysis</td></tr>
+<tr><td>Related</td><td>“Runs on” routes, “Pairs with” wagons, the $9 impulse add-on</td><td>Analysis cross-sell logic</td></tr>
+</tbody></table>
+
+<h1>4 · Writing the copy: a formula</h1>
+<div class="box"><span class="t">Paragraph 1 · The machine (what it is, in design terms)</span>
+<p>“Take command of the 500-horsepower Class EF-4 ‘Mountain Titan’. Built to conquer unrelenting mountain gradients…” Lead with the class, nickname and the
+one number railfans quote. No corporate names.</p></div>
+<div class="box"><span class="t">Paragraph 2 · The challenge (what the player must manage)</span>
+<p>“…operators must look past basic throttle handling and actively monitor circuit overvoltage, exponential self-ventilation cooling curves, and cumulative
+thermal brake fade. Run too fast, and face a permanent, Pro-Mode axle hotbox seizure.” Name three mechanics and one consequence.</p></div>
+<div class="box"><span class="t">Paragraph 3 · The framework (why buying one makes the next better)</span>
+<p>“Full compatibility with the Advanced Simulation Framework: inspection report (Shift+I), maintenance loop (Shift+O), open texture directories.” Link to the Framework page.</p></div>
+<p>Keep each paragraph under 60 words. The spec grid carries the detail; the copy carries the feeling.</p>
+
+<h1>5 · Naming products safely</h1>
+<table>
+<thead><tr><th style="width:52mm">Roadmap name</th><th style="width:60mm">Storefront title</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>PRR steam turbine S2</td><td>Class S2 Steam Turbine Locomotive</td><td>Mechanical class, no railroad mark</td></tr>
+<tr><td>Milwaukee Road Little Joe</td><td>Class EF-4 “Little Joe” Electric</td><td>Class + folk nickname</td></tr>
+<tr><td>NYC S-motor</td><td>Class S-Motor Historic Electric</td><td>Internal classification</td></tr>
+<tr><td>DART Kinki Sharyo SLRV</td><td>Modern 3-Section Articulated LRV / Texas Urban Light Rail Vehicle</td><td>Drops manufacturer and agency marks</td></tr>
+<tr><td>Union Pacific M-10000</td><td>Model M-10000 Early Streamliner</td><td>Avoid active OEM/railroad names</td></tr>
+<tr><td>Texas Electric Railway route</td><td>Texas Electric Railway: Plano Proving Ground Edition</td><td>Defunct 75+ years; lower risk per the analysis</td></tr>
+</tbody></table>
+<p>Ship liveries without logos and leave texture folders open; add this footnote to every product page (from the analysis):</p>
+<pre>NOTICE: This product is an independent artistic recreation modeled strictly after mechanical builder
+specifications and engineering documentation. It features no official corporate affiliation or
+endorsement. UV maps and texture directories are left completely open to support user-generated
+customization and community-distributed visual paint schemes.</pre>
+<p class="small">The analysis is explicit that this is not legal advice and recommends an IP lawyer's review before launch. So is this guide.</p>
+
+<h1>6 · Demos, proving grounds and pre-orders</h1>
+<div class="two">
+<div>
+<h3>Demo tiers (“short and deep”)</h3>
+<ul>
+<li>Never call it a demo on the page: “Plano Proving Ground Edition”, “Mechanics Preview Pack”.</li>
+<li>5–10 miles or one vehicle, with the <b>full</b> framework intact. Price $0–12.</li>
+<li>Its product page carries the same viewer and spec grid as a $40 product, so buyers see the standard.</li>
+</ul>
+</div>
+<div>
+<h3>Greenlight block (pre-orders)</h3>
+<ul>
+<li>Interactive model + spec sheet + a funding bar: “$2,100 of $7,000”.</li>
+<li>Tiers from the analysis: ≈ $1,500 proving ground → ≈ $3,500 fleet expansion → ≈ $7,000 full route. Ask for 20–30% more than you need to cover fees.</li>
+<li>Pre-orders live on the provider (most support them); the bar on your site is a number you update.</li>
+<li>Backers get a “Founders” skin or early access; say so on the block.</li>
+</ul>
+</div>
+</div>
+
+<h1>7 · Dev log, docs and support</h1>
+<ul>
+<li><b>Dev log:</b> one post per milestone with a viewer embed of the WIP model, three screenshots and the next milestone. Doubles as the crowdfunding progress feed.</li>
+<li><b>Docs:</b> one page per product: controls, hotkeys (Shift+I, Shift+O…), known issues, FAQ. Plus the <b>Framework page</b> describing the shared mechanics once.</li>
+<li><b>Compatibility board:</b> a table: product · version · framework version · game version tested. Updated with each release (Part&nbsp;6).</li>
+<li><b>Support:</b> an email address and a public thread or Discord. State response times you can keep.</li>
+</ul>
+
+<h1>8 · Images and video to prepare</h1>
+<table>
+<thead><tr><th style="width:52mm">Asset</th><th>Spec</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>Hero loop</td><td>20–30 s, 1920×1080, silent, no UI, ≤ 8 MB (H.264/WebM), shows motion: sparks, smoke, pole raise</td><td>Landing background / product media</td></tr>
+<tr><td>Product screenshots</td><td>6–10 at 1920×1080, same time of day, no HUD; one cab, one exterior ¾, one detail, one night</td><td>Product page and provider listing</td></tr>
+<tr><td>Card thumbnail</td><td>800×500, ¾ exterior on plain background</td><td>Catalogue cards</td></tr>
+<tr><td>Web model (.glb)</td><td>≤ 60 k triangles, ≤ 8 MB, 2048 px textures max (Part&nbsp;3)</td><td>Viewer</td></tr>
+<tr><td>Logo and favicon</td><td>SVG + 512 px PNG</td><td>Site header, provider store</td></tr>
+<tr><td>Cab tour video (optional)</td><td>2–3 min, narrated</td><td>Product page, YouTube</td></tr>
+</tbody></table>
+
+<h1>9 · Content checklist per product</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Item</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>Design-name title, price, one-line summary</td></tr>
+<tr><td>☐</td><td>Web GLB + manifest with 3–8 hotspots (Part&nbsp;3)</td></tr>
+<tr><td>☐</td><td>Spec grid rows filled; three copy paragraphs</td></tr>
+<tr><td>☐</td><td>Screenshots, thumbnail, hero loop</td></tr>
+<tr><td>☐</td><td>Requirements, installation, version/changelog</td></tr>
+<tr><td>☐</td><td>Community-first footnote present</td></tr>
+<tr><td>☐</td><td>Provider product created with the same title/images; “Buy” link pasted into the page</td></tr>
+<tr><td>☐</td><td>Docs page and Compatibility board row</td></tr>
+</tbody></table>
+
+</body></html>

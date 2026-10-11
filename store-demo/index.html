@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depot Works — interactive vehicle preview demo</title>
+<link rel="stylesheet" href="css/site.css">
+<!-- An import map tells the browser where "three" lives. In production point these at a CDN
+     (cdn.jsdelivr.net/npm/three@0.170.0/...) or keep the vendored copies as here. -->
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+} }
+</script>
+<script>
+  // The landing page picks one of these at random on every visit (Part 4 of the store guide).
+  window.MODEL_POOL = [
+    "models/sample_electric.manifest.json"
+  ];
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark"></span>DEPOT WORKS <span class="tag">independent simulation add-ons</span></div>
+  <nav>
+    <a href="#routes">Routes</a><a href="#traction">Traction</a><a href="#stock">Rolling stock</a>
+    <a href="#demos">Transit demos</a><a href="#log">Dev log</a><a class="cta" href="#account">My depot</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="stage">
+    <canvas id="viewer" aria-label="Interactive 3D vehicle preview"></canvas>
+    <div id="hover-label" class="hover-label" hidden></div>
+    <div class="stage-bar">
+      <span id="status">Loading…</span>
+      <button id="shuffle" title="Load another vehicle">⟳ another vehicle</button>
+    </div>
+  </div>
+  <aside class="panel">
+    <p class="eyebrow">Featured vehicle</p>
+    <h1 id="model-title">…</h1>
+    <p id="model-blurb" class="blurb"></p>
+    <p class="hint">Drag to orbit · scroll to zoom · <b>click a part</b> to work it, or use the buttons:</p>
+    <div id="hotspots" class="hotspots"></div>
+    <div class="price-row"><span class="price">$15.00</span><a class="buy" href="#buy">Add to cart</a></div>
+    <p class="fine">Independent artistic recreation after builder specifications. No corporate affiliation or endorsement.
+      Texture directories are left open for community paint schemes.</p>
+  </aside>
+</section>
+
+<section id="routes" class="band">
+  <h2>Routes</h2>
+  <div class="cards">
+    <article class="card"><div class="thumb"></div><h3>Texas Interurban: Plano Proving Ground Edition</h3><p>5-mile street-running segment with the full advanced simulation framework.</p><span class="price">$12</span></article>
+    <article class="card"><div class="thumb"></div><h3>Submarine Bore: Mechanics Preview Pack</h3><p>Tunnel approach with thermal brake fade and journal oil systems.</p><span class="price">$12</span></article>
+    <article class="card"><div class="thumb"></div><h3>Elevated Western Division</h3><p>Suicide curve, 600 V grid sag, tripper cars.</p><span class="price">$40</span></article>
+  </div>
+</section>
+<section id="traction" class="band alt">
+  <h2>Traction</h2>
+  <div class="cards">
+    <article class="card"><div class="thumb"></div><h3>Class EF-4 "Little Joe" Heavy Electric</h3><p>3,300 V overhead circuitry, cumulative brake fade, axle journal tracking.</p><span class="price">$15</span></article>
+    <article class="card"><div class="thumb"></div><h3>Class Q1 Steam Duplex</h3><p>Synchronised wheel quadrants, valve-gear health in Pro Mode.</p><span class="price">$25</span></article>
+    <article class="card"><div class="thumb"></div><h3>Model M-10000 Early Streamliner</h3><p>Distillate-electric, speed-squared journal friction model.</p><span class="price">$15</span></article>
+  </div>
+</section>
+<footer class="foot">
+  <p>Demo page from the store guide. Replace the catalogue cards with your storefront's product embeds (Part 5).</p>
+</footer>
+
+<script type="module" src="js/viewer.js"></script>
+</body>
+</html>

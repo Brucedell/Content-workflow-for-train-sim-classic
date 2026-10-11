@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Store Part 6 — Selling and Managing</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Online Store · Vehicle Workflow Guide</div>
+    <div class="partno">Part 6</div>
+    <h1>Selling and managing: payments, delivery, updates, support, pre-orders</h1>
+    <div class="sub">The part of the business that is not Blender. Setting up the storefront provider, packaging a product so it installs cleanly, shipping updates
+      without breaking anyone, answering support, running greenlight pre-orders, naming things so no railroad's lawyer writes to you, and what the money looks like after fees and tax.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Setting up the storefront provider</li>
+    <li>Packaging a product: installer, versioning, readme</li>
+    <li>Shipping updates without breaking anyone</li>
+    <li>Support that does not eat your week</li>
+    <li>Pre-orders, greenlight thresholds and memberships</li>
+    <li>Names, logos, liveries: the legal playbook</li>
+    <li>The money: fees, taxes, what you keep</li>
+    <li>The e-mail list</li>
+    <li>A weekly routine</li>
+  </ol></div>
+  <div class="foot">Money and legal figures in this part are quoted from the opportunity analysis you supplied (a U.S., Texas-based sole proprietor) and are planning
+  estimates, not advice. Confirm fees on the provider's pricing page (<span class="pill u">check</span>) and tax rates with an accountant before you file.</div>
+</section>
+
+<h1>1 · Setting up the storefront provider</h1>
+<p>Part&nbsp;1 recommended a hosted creator store (route A) for the launch. Whichever one you choose, the set-up is the same seven steps and takes an afternoon.</p>
+<ol class="steps">
+<li><b>Account and payout.</b> Sign up under the studio name; connect the bank account or PayPal; fill in the tax form (W-9 for a U.S. seller). Switch on any “collect sales tax / VAT for me” option: that makes the provider the merchant of record. <span class="pill u">check</span></li>
+<li><b>Store page branding.</b> Upload the logo and set the accent colour so it matches the landing site; set the store address to <code>store.yourstudio</code> (Part&nbsp;5 §3).</li>
+<li><b>One product per vehicle or route.</b> Title in the design-name form (§6), the same images as the product page, the short pitch, the price. Mark it a digital product.</li>
+<li><b>Upload the file</b> (§2). Providers keep every file you upload; use the versioned name so you can tell them apart later.</li>
+<li><b>Licence text.</b> Paste your EULA (one page: personal use, no redistribution of the paid files, textures open for community repaints, no refunds after download except where law requires).</li>
+<li><b>Discount codes and bundles.</b> Create a launch code and, when you have two related products, a bundle; both are a few clicks.</li>
+<li><b>Test purchase.</b> Set the price to $0 or use the provider's test mode, buy it yourself, follow the e-mail, download, install. Then set the real price.</li>
+</ol>
+
+<h1>2 · Packaging a product: installer, versioning, readme</h1>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="330" height="200" rx="7" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="175" y="40" text-anchor="middle" font-weight="bold">TSC product · ClassEF4_LittleJoe_v1.2.0.zip</text>
+  <text x="22" y="62" font-family="DejaVu Sans Mono" font-size="8.5">ClassEF4_LittleJoe.rwp     ← Package Manager file</text>
+  <text x="22" y="78" font-family="DejaVu Sans Mono" font-size="8.5">README.txt                 ← install, version, support</text>
+  <text x="22" y="94" font-family="DejaVu Sans Mono" font-size="8.5">Manual.pdf                 ← controls, Pro-Mode notes</text>
+  <text x="22" y="110" font-family="DejaVu Sans Mono" font-size="8.5">CHANGELOG.txt</text>
+  <text x="22" y="126" font-family="DejaVu Sans Mono" font-size="8.5">LICENSE.txt</text>
+  <text x="22" y="150" fill="#5b6676" font-size="8.5">.rwp = the game's own installer format: the player</text>
+  <text x="22" y="164" fill="#5b6676" font-size="8.5">uses Utilities ▸ Package Manager ▸ Install. No .exe</text>
+  <text x="22" y="178" fill="#5b6676" font-size="8.5">means no antivirus warnings and no code signing.</text>
+  <text x="22" y="200" fill="#5b6676" font-size="8.5">Serialise .bin, strip .xml, compress .TgPcDx (TSC guide Part 7).</text>
+
+  <rect x="380" y="20" width="330" height="200" rx="7" fill="#f1e9f8" stroke="#8a4fb8"/>
+  <text x="545" y="40" text-anchor="middle" font-weight="bold">TF3 product · little_joe_ef4_v1.2.0.zip</text>
+  <text x="392" y="62" font-family="DejaVu Sans Mono" font-size="8.5">little_joe_ef4_1/          ← mod folder (TF3 guide Part 6)</text>
+  <text x="392" y="78" font-family="DejaVu Sans Mono" font-size="8.5">  mod.lua  res/  image_00.tga</text>
+  <text x="392" y="94" font-family="DejaVu Sans Mono" font-size="8.5">README.txt  CHANGELOG.txt  LICENSE.txt</text>
+  <text x="392" y="118" fill="#5b6676" font-size="8.5">Player drops the folder into userdata/mods or</text>
+  <text x="392" y="132" fill="#5b6676" font-size="8.5">the game's Mods tab imports the zip.</text>
+  <text x="392" y="156" fill="#5b6676" font-size="8.5">Keep the folder's number suffix stable (_1) across</text>
+  <text x="392" y="170" fill="#5b6676" font-size="8.5">updates; saved games reference it.</text>
+  <text x="392" y="194" fill="#5b6676" font-size="8.5">One store product can carry both zips as two files.</text>
+</svg>
+<figcaption><b>Figure 6.1 · What the buyer actually downloads.</b> Each game has its own native package; both go in the same product with a plain readme on top.
+The version number is in the file name so support e-mails can quote it.</figcaption>
+</figure>
+<table>
+<thead><tr><th style="width:42mm">Version number</th><th>Change it when</th></tr></thead>
+<tbody>
+<tr><td><b>1</b>.x.x · major</td><td>Saves or scenarios break, or the product is re-made (new model, new sim). Players expect to reinstall.</td></tr>
+<tr><td>x.<b>2</b>.x · minor</td><td>New features: a new livery, a new script mode, extra scenarios. Drop-in over the old version.</td></tr>
+<tr><td>x.x.<b>3</b> · patch</td><td>Fixes only. Always safe to install.</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">The readme is the support ticket you never get</span><p>Five lines: which game version it needs, how to install, where the manual is,
+what to send when it breaks (TSC: the LogMate log; TF3: <code>stdout.txt</code>), and the version. Put the same five lines on the product page.</p></div>
+
+<h1>3 · Shipping updates without breaking anyone</h1>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="u6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <g font-size="8.5">
+  <rect x="10" y="30" width="120" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="70" y="52" text-anchor="middle" font-weight="bold">1 fix in Blender/</text><text x="70" y="66" text-anchor="middle" font-weight="bold">Blueprint/Lua</text><text x="70" y="82" text-anchor="middle" fill="#5b6676">same master scene</text>
+  <rect x="160" y="30" width="120" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="220" y="52" text-anchor="middle" font-weight="bold">2 re-export + test</text><text x="220" y="66" text-anchor="middle" fill="#5b6676">crosscheck script,</text><text x="220" y="80" text-anchor="middle" fill="#5b6676">install from the zip</text>
+  <rect x="310" y="30" width="120" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="370" y="52" text-anchor="middle" font-weight="bold">3 bump version</text><text x="370" y="66" text-anchor="middle" fill="#5b6676">CHANGELOG entry,</text><text x="370" y="80" text-anchor="middle" fill="#5b6676">new zip name</text>
+  <rect x="460" y="30" width="120" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="520" y="52" text-anchor="middle" font-weight="bold">4 upload to product</text><text x="520" y="66" text-anchor="middle" fill="#5b6676">replace file;</text><text x="520" y="80" text-anchor="middle" fill="#5b6676">buyers' library updates</text>
+  <rect x="610" y="30" width="100" height="60" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="660" y="52" text-anchor="middle" font-weight="bold">5 tell people</text><text x="660" y="66" text-anchor="middle" fill="#5b6676">provider's update</text><text x="660" y="80" text-anchor="middle" fill="#5b6676">mail + dev log</text>
+  </g>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#u6)"><path d="M130,60 L158,60"/><path d="M280,60 L308,60"/><path d="M430,60 L458,60"/><path d="M580,60 L608,60"/></g>
+  <text x="10" y="125" fill="#5b6676" font-size="8.5">Every buyer's library (the “Personal Depot”) shows the new version and a re-download link; most providers can e-mail all buyers of a product in one click.</text>
+</svg>
+<figcaption><b>Figure 6.2 · The update loop.</b> Because the provider keeps the buyer list and the library, an update is “replace file, press notify”.</figcaption>
+</figure>
+<ul>
+<li><b>Never rename</b> blueprint paths, the TF3 mod folder suffix, or the product's provider ID; these are what saves, scenarios and libraries point at.</li>
+<li><b>Keep the previous zip</b> attached to the product for a month so anyone whose scenario broke can roll back.</li>
+<li><b>Batch fixes</b> into a patch every two to four weeks unless something is unplayable; frequent tiny updates train buyers to ignore update mail.</li>
+<li><b>Changelog in plain words</b> (“pantograph no longer clips the roof in the cab view”), not internal names.</li>
+</ul>
+
+<h1>4 · Support that does not eat your week</h1>
+<table>
+<thead><tr><th style="width:48mm">Rule</th><th>How</th></tr></thead>
+<tbody>
+<tr><td>One channel</td><td>A support e-mail address (or the provider's message button). A Discord is fine for community, but tell people bugs go to e-mail so nothing is lost in chat.</td></tr>
+<tr><td>Ask for the log first</td><td>Autoreply template: game version, product version, what happened, attach the log (TSC: LogMate; TF3: stdout.txt). Half the tickets solve themselves.</td></tr>
+<tr><td>Public FAQ</td><td>Every question answered twice becomes an FAQ entry on the docs page: install steps, “missing assets” (required DLC), cab controls, repaints.</td></tr>
+<tr><td>Refunds</td><td>State the policy on every product page; the provider handles the money. A quick refund for a genuine incompatibility costs less than an argument.</td></tr>
+<tr><td>Support window</td><td>Answer within two working days; say so. Batch support into one slot per day instead of reacting.</td></tr>
+<tr><td>Known-issues list</td><td>On the product page, dated. It stops duplicate reports and shows the product is alive.</td></tr>
+</tbody></table>
+
+<h1>5 · Pre-orders, greenlight thresholds and memberships</h1>
+<p>The opportunity analysis proposes two funding models that both start from the interactive viewer. Both are built from features the storefront providers already
+have (pre-orders, memberships), so they are configuration, not code.</p>
+<figure>
+<svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <text x="10" y="20" font-weight="bold">A · Greenlight threshold (per project)</text>
+  <g font-size="8.5">
+  <rect x="10" y="30" width="150" height="70" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="85" y="50" text-anchor="middle" font-weight="bold">Pitch</text><text x="85" y="66" text-anchor="middle">interactive 3D model on the</text><text x="85" y="80" text-anchor="middle">landing page + spec sheet</text><text x="85" y="94" text-anchor="middle" fill="#5b6676">(Parts 3–4)</text>
+  <rect x="190" y="30" width="150" height="70" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="265" y="50" text-anchor="middle" font-weight="bold">Pre-order / Greenlight</text><text x="265" y="66" text-anchor="middle">goal e.g. $1,500 locomotive,</text><text x="265" y="80" text-anchor="middle">$6,000 route; progress bar</text><text x="265" y="94" text-anchor="middle" fill="#5b6676">provider pre-order product</text>
+  <rect x="370" y="30" width="150" height="70" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="445" y="50" text-anchor="middle" font-weight="bold">Trigger at 100 %</text><text x="445" y="66" text-anchor="middle">locks into the build queue;</text><text x="445" y="80" text-anchor="middle">backers get Founders skin,</text><text x="445" y="94" text-anchor="middle">alpha access</text>
+  <rect x="550" y="30" width="160" height="70" rx="5" fill="#fff" stroke="#8a96a6"/><text x="630" y="50" text-anchor="middle" font-weight="bold">Ship</text><text x="630" y="66" text-anchor="middle">pre-order becomes the</text><text x="630" y="80" text-anchor="middle">normal product; backers</text><text x="630" y="94" text-anchor="middle">download from their library</text>
+  </g>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#g6)"><path d="M160,65 L188,65"/><path d="M340,65 L368,65"/><path d="M520,65 L548,65"/></g>
+  <text x="10" y="135" font-weight="bold">B · Membership (monthly, the studio vault)</text>
+  <g font-size="8.5">
+  <rect x="10" y="145" width="220" height="80" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="20" y="163" font-weight="bold">Tier 1 · ~$5/month</text><text x="20" y="179">dev blog, behind-the-scenes Blender</text><text x="20" y="193">builds, votes on minor features</text>
+  <rect x="250" y="145" width="220" height="80" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="260" y="163" font-weight="bold">Tier 2 · ~$15/month</text><text x="260" y="179">voting tokens; quarterly Community</text><text x="260" y="193">Choice decides the next 90 days</text>
+  <rect x="490" y="145" width="220" height="80" rx="5" fill="#fff" stroke="#8a96a6"/><text x="500" y="163" font-weight="bold">Where it runs</text><text x="500" y="179">Patreon, or the provider's membership</text><text x="500" y="193">feature; paid on the 1st each month</text>
+  <text x="500" y="215" fill="#5b6676">covers living costs while A funds builds</text>
+  </g>
+</svg>
+<figcaption><b>Figure 6.3 · Two funding models from the analysis.</b> A finances individual vehicles; B finances you. They combine: members see the pitch first and
+get a backer discount.</figcaption>
+</figure>
+<div class="box rule"><span class="t">The golden rule from the analysis</span><p>Launch any pre-order with a <em>working</em> proof: the free “Proving Ground” demo route or a
+free demo vehicle that shows the scripted systems running in the real game. The interactive web model proves the art; the demo proves the code. Backers trust what
+they have already driven.</p></div>
+<table>
+<thead><tr><th style="width:40mm">Money arrives</th><th style="width:40mm">When</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Provider pre-orders</td><td>2–3 business days per sale</td><td>Charged at order; refundable until shipped. Say the target date and the fallback.</td></tr>
+<tr><td>Kickstarter-style campaign</td><td>~14 days after the campaign ends</td><td>All-or-nothing; good for one flagship route, heavy on video and updates.</td></tr>
+<tr><td>Membership</td><td>1st of every month</td><td>Predictable; needs a steady stream of posts (the dev log you keep anyway).</td></tr>
+</tbody></table>
+
+<h1>6 · Names, logos, liveries: the legal playbook</h1>
+<p>Part&nbsp;2 §5 gave the naming table. The reasoning, in one figure, so you can apply it to a product the table does not list.</p>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="220" height="160" rx="7" fill="#e6f4ea" stroke="#1e6b35"/>
+  <text x="120" y="42" text-anchor="middle" font-weight="bold" fill="#1e6b35">Free to use</text>
+  <text x="22" y="64">• mechanical design names: Class S2,</text><text x="30" y="78">Q1, EF-4, M-10000, PCC</text>
+  <text x="22" y="96">• nicknames: “Little Joe”, “Jawn Henry”</text>
+  <text x="22" y="114">• the shape of the vehicle (builder</text><text x="30" y="128">drawings, not a protected work)</text>
+  <text x="22" y="146">• historical facts, routes, dates</text>
+  <text x="22" y="166" fill="#5b6676" font-size="8.5">no consumer confusion = no trademark case</text>
+  <rect x="250" y="20" width="220" height="160" rx="7" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="360" y="42" text-anchor="middle" font-weight="bold" fill="#a86400">Careful</text>
+  <text x="262" y="64">• active builders' brand names in a</text><text x="270" y="78">title (EMD, GE): use the model number</text>
+  <text x="262" y="96">• transit agencies' current logos and</text><text x="270" y="110">colour schemes</text>
+  <text x="262" y="128">• real business signage on buildings</text>
+  <text x="262" y="146">• photos you did not take</text>
+  <text x="262" y="166" fill="#5b6676" font-size="8.5">hint at it; do not reproduce the mark</text>
+  <rect x="490" y="20" width="220" height="160" rx="7" fill="#fbe9e7" stroke="#c0392b"/>
+  <text x="600" y="42" text-anchor="middle" font-weight="bold" fill="#c0392b">Do not sell</text>
+  <text x="502" y="64">• railroad names and heralds in titles</text><text x="510" y="78">or on the model as shipped</text>
+  <text x="502" y="96">• “fallen flag” marks now owned by</text><text x="510" y="110">the successor road</text>
+  <text x="502" y="128">• “official”, “licensed”, “authentic</text><text x="510" y="142">XYZ Railroad” wording</text>
+  <text x="502" y="166" fill="#5b6676" font-size="8.5">liveries: leave to community repaints</text>
+</svg>
+<figcaption><b>Figure 6.4 · The three bins.</b> Everything you sell lives in the left bin. The NOTICE footnote on every product page (Part&nbsp;2) says so in writing and
+tells the community the UV layout is open for their own paint schemes, which you host nowhere and sell never.</figcaption>
+</figure>
+<ul>
+<li><b>Product title form:</b> <i>Class / Model + designation + type</i>, e.g. “Class EF-4 ‘Little Joe’ Heavy Electric”, “Model M-10000 Early Streamliner”.</li>
+<li><b>Ship the model in a plausible unlettered scheme</b> (builder's photo grey, or a plain colour) with the texture folders open; a day after release the community will have the real ones.</li>
+<li><b>Routes:</b> describe the place and era (“Texas interurban, 1930s, street running”); street names and buildings are fine, business logos are not.</li>
+<li><b>Screenshots</b> on the store are of your unlettered version. Community repaints in screenshots invite questions.</li>
+<li><b>If a studio partnership</b> (official DLC on Steam) comes up later, you license the <em>compiled</em> product; keep the master .blend, textures and source scripts yours. The analysis covers the split in detail.</li>
+</ul>
+
+<h1>7 · The money: fees, taxes, what you keep</h1>
+<p>Planning figures from the analysis for one $40 flagship route, before any pre-order income. They assume a hosted store taking ~10% all-in and a Texas-based
+sole proprietor (0% state income tax).</p>
+<table>
+<thead><tr><th style="width:52mm">Per release</th><th style="width:34mm">Low · 500 units</th><th style="width:34mm">Mid · 1,200 units</th><th>High · 2,500 units</th></tr></thead>
+<tbody>
+<tr><td>Gross at $40</td><td>$20,000</td><td>$48,000</td><td>$100,000</td></tr>
+<tr><td>Platform and payment fees (~10%)</td><td>−$2,000</td><td>−$4,800</td><td>−$10,000</td></tr>
+<tr><td>Operating costs (software, hosting, domain)</td><td>−$1,500</td><td>−$1,500</td><td>−$1,500</td></tr>
+<tr><td>Pre-tax profit</td><td>$16,500</td><td>$41,700</td><td>$88,500</td></tr>
+<tr><td>Self-employment + federal income tax (~27–28%)</td><td>−$4,632</td><td>−$11,705</td><td>−$24,842</td></tr>
+<tr><td><b>Take-home</b></td><td><b>$11,868</b></td><td><b>$29,995</b></td><td><b>$63,658</b></td></tr>
+</tbody></table>
+<ul>
+<li><b>Self-employment tax</b> (Social Security + Medicare) is 15.3% on 92.35% of profit; <b>federal income tax</b> about 15% effective at these levels; a state with income tax would take a further 6–10%.</li>
+<li><b>Set aside 30% of every payout</b> in a separate account the day it lands; pay quarterly estimated tax. This single habit is the difference between a business and a surprise.</li>
+<li><b>Hours matter more than units:</b> the analysis works out ~$15/h at Mid and ~$32/h at High for a 2,000-hour route. A $15–25 locomotive built on reused scripts and bogies is a far better hour.</li>
+<li><b>Fees are the price of not running checkout, tax and delivery yourself.</b> Moving to Shopify + Stripe (route B) at scale lowers the percentage but adds monthly plans and apps; revisit at 10+ products.</li>
+<li><b>Expenses you can deduct:</b> Blender is free, but the games, DLC used for testing, reference books, the domain, hosting, a share of the PC. Keep receipts in one folder.</li>
+</ul>
+<div class="box warn"><span class="t">Steam instead?</span><p>Official DLC via a publisher means 30% to Valve plus the publisher's share, but visibility and automatic updates.
+The analysis's position: independent first, with the design-name catalogue and your own customer list; a partnership later is additive as long as you only license
+the compiled product.</p></div>
+
+<h1>8 · The e-mail list</h1>
+<p>The analysis calls this the first of three leverage points, and it costs nothing: every buyer and every demo downloader gives you an address. The storefront
+provider collects buyers' addresses by itself; for the free demo, use the provider's $0 product so the download goes through the same door. When product two
+launches, one mail reaches everyone who already trusts product one.</p>
+<ul>
+<li>One list, one message per release and one per major update; a dev-log digest at most monthly.</li>
+<li>Export the list from the provider every quarter (it is your customer list, not theirs).</li>
+<li>Put the sign-up on the landing page footer and the dev log; a sentence, not a pop-up.</li>
+</ul>
+
+<h1>9 · A weekly routine</h1>
+<table>
+<thead><tr><th style="width:36mm">When</th><th>What</th></tr></thead>
+<tbody>
+<tr><td>Daily, 20 min</td><td>Support inbox; log anything repeated into the FAQ draft.</td></tr>
+<tr><td>Weekly</td><td>Dev-log post with one image or a short clip from Blender or the game; check the greenlight bar; glance at the host's bandwidth and the provider's sales.</td></tr>
+<tr><td>Per release</td><td>Package (§2) ▸ test-install ▸ product page ▸ web .glb into the pool ▸ mail the list ▸ post.</td></tr>
+<tr><td>Monthly</td><td>Patch round-up (§3); set aside tax; export the customer list; back up the master .blend files and the site folder off the machine.</td></tr>
+<tr><td>Quarterly</td><td>Estimated tax payment; look at which products sold and what the support cost; decide the next greenlight pitch.</td></tr>
+</tbody></table>
+
+</body></html>

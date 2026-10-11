@@ -1,0 +1,115 @@
+{
+  "model": "sample_electric.glb",
+  "title": "Class EF-4 \"Little Joe\" Heavy Electric (demo stand-in)",
+  "blurb": "Demo model built from primitives to prove the pipeline: body, two three-axle bogies, two pantographs, four doors, wipers.",
+  "triangles": 816,
+  "bbox": [
+    [
+      -1.5,
+      -9.0,
+      -3.4969112050475815e-08
+    ],
+    [
+      1.5,
+      9.024999618530273,
+      4.159999847412109
+    ]
+  ],
+  "textureMB": 0.0,
+  "forward": "+Y in Blender -> -Z in glTF (viewer rotates so the front faces the camera)",
+  "animations": [
+    "open_door_l1",
+    "open_door_l2",
+    "open_door_r1",
+    "open_door_r2",
+    "raise_panto_front",
+    "raise_panto_rear",
+    "wipers"
+  ],
+  "hotspots": [
+    {
+      "node": "1_0500_door_l1",
+      "label": "Door L1",
+      "animations": [
+        "open_door_l1"
+      ]
+    },
+    {
+      "node": "1_0500_door_l2",
+      "label": "Door L2",
+      "animations": [
+        "open_door_l2"
+      ]
+    },
+    {
+      "node": "1_0500_door_r1",
+      "label": "Door R1",
+      "animations": [
+        "open_door_r1"
+      ]
+    },
+    {
+      "node": "1_0500_door_r2",
+      "label": "Door R2",
+      "animations": [
+        "open_door_r2"
+      ]
+    },
+    {
+      "node": "1_0128_panto01_base",
+      "label": "Pantograph front",
+      "animations": [
+        "raise_panto_front"
+      ]
+    },
+    {
+      "node": "1_0128_panto01_part01",
+      "label": "Pantograph front",
+      "animations": [
+        "raise_panto_front"
+      ]
+    },
+    {
+      "node": "1_0128_panto01_part02",
+      "label": "Pantograph front",
+      "animations": [
+        "raise_panto_front"
+      ]
+    },
+    {
+      "node": "1_0128_panto02_base",
+      "label": "Pantograph rear",
+      "animations": [
+        "raise_panto_rear"
+      ]
+    },
+    {
+      "node": "1_0128_panto02_part01",
+      "label": "Pantograph rear",
+      "animations": [
+        "raise_panto_rear"
+      ]
+    },
+    {
+      "node": "1_0128_panto02_part02",
+      "label": "Pantograph rear",
+      "animations": [
+        "raise_panto_rear"
+      ]
+    },
+    {
+      "node": "1_0064_wiper01_l",
+      "label": "Wipers",
+      "animations": [
+        "wipers"
+      ]
+    },
+    {
+      "node": "1_0064_wiper01_r",
+      "label": "Wipers",
+      "animations": [
+        "wipers"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Store Part 3 — From Blender to the Browser</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Online Store · Vehicle Workflow Guide</div>
+    <div class="partno">Part 3</div>
+    <h1>From Blender to the browser: the web GLB</h1>
+    <div class="sub">The third branch of the shared model. A web model must be small, must carry its animations as named clips, and must tell the viewer which parts are
+      clickable. This part is the recipe, with the export settings and the budgets.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Where this branch leaves the shared scene</li>
+    <li>Budgets: how big a web model may be</li>
+    <li>The poly diet and baking</li>
+    <li>Textures for the web (PBR, like TF3)</li>
+    <li>Hotspots: tagging what is clickable</li>
+    <li>Animations as named clips (NLA strips)</li>
+    <li>Export settings, by hand and with the add-on</li>
+    <li>Checking the result before it goes online</li>
+    <li>Checklist</li>
+  </ol></div>
+  <div class="foot">Export mechanics were verified by exporting a synthetic locomotive with the add-on and loading it in the demo viewer in a headless browser
+  (<span class="pill v">demo</span>). Size budgets are practical guidance, not browser limits.</div>
+</section>
+
+<h1>1 · Where this branch leaves the shared scene</h1>
+<figure>
+<svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="b3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="60" width="170" height="120" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="95" y="82" text-anchor="middle" font-weight="bold">Shared scene</text>
+  <text x="22" y="102">TSC names, LOD-1 and</text><text x="22" y="116">LOD-2 twins, cab, shadows,</text><text x="22" y="130">digits, couplers, actions on</text><text x="22" y="144">doors / pantos / wipers</text>
+  <circle cx="215" cy="120" r="12" fill="#16324f"/><text x="215" y="124" text-anchor="middle" fill="#fff" font-weight="bold">⑂</text>
+  <line x1="180" y1="120" x2="201" y2="120" stroke="#16324f" stroke-width="2"/>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#b3)"><path d="M227,112 C250,60 260,40 290,40"/><path d="M227,120 L290,120"/><path d="M227,128 C250,180 260,200 290,200"/></g>
+  <rect x="292" y="22" width="180" height="36" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="382" y="44" text-anchor="middle">TSC: .igs + .ia (guide/)</text>
+  <rect x="292" y="102" width="180" height="36" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="382" y="124" text-anchor="middle">TF3: FBX per LOD (guide-tf3/)</text>
+  <rect x="292" y="182" width="180" height="36" rx="5" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.8"/><text x="382" y="204" text-anchor="middle" font-weight="bold">Web: one .glb + manifest</text>
+  <rect x="500" y="150" width="210" height="80" rx="6" fill="#fff" stroke="#177a6e"/>
+  <text x="510" y="168" font-weight="bold">Web branch keeps</text><text x="510" y="184">LOD-1 meshes only (decimated if needed)</text><text x="510" y="198">tagged actions as named clips</text><text x="510" y="212">hotspot tags → manifest.json</text>
+  <text x="510" y="230" fill="#5b6676" font-size="8.5">drops: cab, shadows, digits, couplers, LOD twins</text>
+</svg>
+<figcaption><b>Figure 3.1 · Three exports from one scene.</b> The web branch is the smallest: no cab, no LODs (one is enough at web scale), no game-specific
+parts. The add-on (Part&nbsp;7) does the dropping and tagging on a temporary basis so the scene stays the TSC master.</figcaption>
+</figure>
+
+<h1>2 · Budgets: how big a web model may be</h1>
+<table>
+<thead><tr><th style="width:40mm">Measure</th><th style="width:34mm">Target</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Triangles</td><td>≤ 60,000 (phones) · ≤ 150,000 (desktop only)</td><td>Loads in a second; orbit stays smooth on a laptop GPU. A game-grade loco can be 500 k+.</td></tr>
+<tr><td>File size (.glb)</td><td>≤ 8 MB, ideally 2–4 MB</td><td>Loads before the visitor scrolls away; textures dominate the size.</td></tr>
+<tr><td>Textures</td><td>≤ 2048 px per sheet, 2–4 sheets, JPEG for colour, PNG only where alpha is needed</td><td>A 4 k PNG alone is 20 MB+.</td></tr>
+<tr><td>Materials</td><td>≤ 6</td><td>Each is a separate draw; also keeps the glTF simple.</td></tr>
+<tr><td>Animations</td><td>3–8 short clips, 0.5–2 s</td><td>One per hotspot; keep them crisp.</td></tr>
+<tr><td>Nodes</td><td>≤ 60</td><td>Only parts that move or are clicked need to stay separate; merge the rest.</td></tr>
+</tbody></table>
+<p>The demo model is 816 triangles and 0.09 MB because it is primitives; a real loco optimised as below typically lands at 30–60 k triangles and 3–6 MB. <span class="pill v">demo</span></p>
+
+<h1>3 · The poly diet and baking</h1>
+<ol class="steps">
+<li><b>Duplicate the LOD-1 model into a “web” collection</b> (or let the add-on decimate static parts on the fly with a triangle budget). Keep the master untouched.</li>
+<li><b>Delete what the camera never sees:</b> cab interior, underframe detail below the solebar, bolts, interior walls of closed boxes.</li>
+<li><b>Decimate static parts</b> (Decimate modifier, Collapse 0.3–0.6) but <em>not</em> hotspot parts: doors, pantograph arms, wipers keep their silhouettes.</li>
+<li><b>Merge static parts per material</b> (body + roof + underframe) so the node count drops; moving parts stay separate objects.</li>
+<li><b>Bake</b> the high-poly detail onto the low-poly duplicate: normal map, ambient occlusion, and the colour with baked AO if the game textures had none. Cycles ▸ Bake, Selected to Active, cage on.</li>
+<li><b>Apply scale and rotation</b> (as for both games); origins stay on hinges.</li>
+</ol>
+<div class="box tip"><span class="t">Reuse the TF3 textures</span><p>The TF3 branch already produced albedo, normal and metal/gloss/AO sheets. glTF wants almost the same set
+(base colour, normal, metallic-roughness with AO), so the web branch costs you no new texture work: roughness = 1 − gloss, which the packer script can produce
+(Part&nbsp;7).</p></div>
+
+<h1>4 · Textures for the web</h1>
+<table>
+<thead><tr><th style="width:44mm">glTF slot</th><th style="width:44mm">Blender Principled input</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>baseColorTexture</td><td>Base Color</td><td>sRGB; JPEG unless alpha is needed.</td></tr>
+<tr><td>normalTexture</td><td>Normal Map node → Normal</td><td>OpenGL convention (Blender's), PNG or JPEG.</td></tr>
+<tr><td>metallicRoughnessTexture</td><td>Metallic (B) and Roughness (G) via Separate Color</td><td>Blender's exporter packs these for you when the inputs are driven by image channels.</td></tr>
+<tr><td>occlusionTexture</td><td>(glTF Material Output node, Occlusion socket)</td><td>Optional; or bake AO into base colour.</td></tr>
+<tr><td>emissiveTexture</td><td>Emission</td><td>Lamps, cab glow.</td></tr>
+<tr><td>Alpha / glass</td><td>Alpha, Blend Mode = Alpha Blend</td><td>Windows; the add-on sets blend mode for materials tagged <code>web_glass</code>.</td></tr>
+</tbody></table>
+<p>Resize sheets to 2048 or 1024 before export (Image ▸ Resize) and set the exporter's image format to <b>Automatic</b> so colour sheets go out as JPEG.</p>
+
+<h1>5 · Hotspots: tagging what is clickable</h1>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="330" height="160" rx="7" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="20" y="40" font-weight="bold">Object: 1_0500_door_l1  (Custom Properties)</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9.5"><text x="20" y="64">web_anim   = "open_door_l1"</text><text x="20" y="80">web_label  = "Door L1"</text></g>
+  <text x="20" y="104" fill="#5b6676">has an action: closed at frame 0, open at 24</text>
+  <text x="20" y="130" font-weight="bold">Object: 1_0128_panto01_base</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="9.5"><text x="20" y="150">web_hotspot = "raise_panto_front"</text></g>
+  <text x="20" y="168" fill="#5b6676">no action itself; clicking it plays the arms' clip</text>
+  <rect x="380" y="20" width="330" height="160" rx="7" fill="#e5f4f1" stroke="#177a6e"/>
+  <text x="390" y="40" font-weight="bold">sample_electric.manifest.json (written by the add-on)</text>
+  <g font-family="DejaVu Sans Mono, monospace" font-size="8.8"><text x="390" y="62">"hotspots": [</text><text x="400" y="76">{ "node": "1_0500_door_l1",</text><text x="410" y="90">"label": "Door L1", "animations": ["open_door_l1"] },</text><text x="400" y="104">{ "node": "1_0128_panto01_base",</text><text x="410" y="118">"label": "Pantograph front",</text><text x="410" y="132">"animations": ["raise_panto_front"] }, … ]</text><text x="390" y="152">"animations": ["open_door_l1", …, "raise_panto_front", "wipers"]</text><text x="390" y="166">"triangles": 816</text></g>
+</svg>
+<figcaption><b>Figure 3.2 · Tag in Blender, manifest out.</b> <code>web_anim</code> on an animated object makes it a hotspot that plays its own clip; <code>web_hotspot</code> on any object
+(a door frame, a pantograph base) makes it click-through to a named clip. Labels are inherited per animation, so the two pantograph arms and the base all read
+“Pantograph front”. <span class="pill v">demo</span></figcaption>
+</figure>
+<ul>
+<li>Choose 3–8 hotspots per vehicle: the things the product page talks about (doors, pantograph/trolley pole, cab door, headlight, a signature mechanism).</li>
+<li>Make the clickable mesh big enough to hit on a phone; tag the frame or base when the moving part is thin (the pantograph arms are 12 cm wide, the base is 1.6 m).</li>
+<li>The viewer walks up parents on a click, so tagging a parent covers all its children.</li>
+</ul>
+
+<h1>6 · Animations as named clips</h1>
+<p>glTF stores animations as named clips; the viewer plays a clip by name. Blender's exporter can name clips from <b>NLA tracks</b>, and the add-on pushes each tagged
+action into a track/strip named after <code>web_anim</code> (the same push the TF3 branch makes, so one scene serves both). Objects sharing a clip name (two pantograph arms,
+two wipers) merge into one glTF animation. <span class="pill v">demo</span></p>
+<ul>
+<li>Key the <em>open</em> state only; the viewer plays the clip backwards on the second click (“close”).</li>
+<li>Frame 0 = rest; 12–30 frames at 24&nbsp;fps; linear or ease-out keys; no scale.</li>
+<li>Looping things (wipers, fans) are still exported once; the viewer plays once per click. Make the clip a full cycle so it returns to rest.</li>
+</ul>
+
+<h1>7 · Export settings</h1>
+<div class="two">
+<div>
+<h3>By hand (File ▸ Export ▸ glTF 2.0)</h3>
+<ul>
+<li>Format: <b>glTF Binary (.glb)</b></li>
+<li>Include: Selected Objects (the web collection)</li>
+<li>Transform: <b>+Y Up</b> ✓</li>
+<li>Mesh: Apply Modifiers ✓, UVs ✓, Normals ✓</li>
+<li>Material: Export, Images: Automatic</li>
+<li>Animation ✓ · <b>Group by NLA Track</b> ✓ · Sampling ✓ (force) · Limit to playback range ✗</li>
+<li>Compression: off for the first test (Draco needs a decoder in the page; add later if size matters)</li>
+</ul>
+</div>
+<div>
+<h3>With the add-on (Part 7)</h3>
+<ul>
+<li>TSC sidebar ▸ <b>Web viewer</b> ▸ Output folder = your site's <code>models/</code></li>
+<li>Model name, triangle budget (60,000), max texture size (2048)</li>
+<li><b>Export web GLB + manifest</b></li>
+<li>Reads: LOD-1 objects, skips TSC-only parts, decimates static parts if over budget, pushes tagged actions to NLA strips, exports with the settings on the left, writes the manifest.</li>
+<li>Reports triangle count, file size, oversized textures.</li>
+</ul>
+</div>
+</div>
+
+<h1>8 · Checking the result before it goes online</h1>
+<ol class="steps">
+<li>Copy the <code>.glb</code> and <code>.manifest.json</code> into <code>store-demo/models/</code> and add the manifest path to <code>MODEL_POOL</code> in <code>index.html</code>.</li>
+<li>Start the local server (Part&nbsp;5 §1) and open the page. The status line shows triangles and animation count.</li>
+<li>Click every hotspot button and every part; hover labels should match. Watch for: a door opening the wrong way (key direction), a part jumping at the start (rest pose not at frame 0), black materials (missing base colour), see-through faces (flipped normals: Mesh ▸ Normals ▸ Recalculate Outside).</li>
+<li>Resize the window to phone width; orbit with touch if you can.</li>
+<li>Check the file size in the browser's Network tab (F12) and the frame rate while orbiting.</li>
+</ol>
+
+<h1>9 · Checklist</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Item</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>Under the triangle, size and texture budgets</td></tr>
+<tr><td>☐</td><td>Static parts merged per material; moving/clickable parts separate with origins on hinges</td></tr>
+<tr><td>☐</td><td>3–8 hotspots tagged with labels; thin parts tagged via a base/frame</td></tr>
+<tr><td>☐</td><td>Each clip named, rest at frame 0, open state keyed; shared names merged</td></tr>
+<tr><td>☐</td><td>Glass tagged; emissive set for lamps</td></tr>
+<tr><td>☐</td><td>Exported +Y up, .glb, NLA tracks; manifest written</td></tr>
+<tr><td>☐</td><td>Loaded and clicked in the local viewer; phone width checked</td></tr>
+</tbody></table>
+
+</body></html>

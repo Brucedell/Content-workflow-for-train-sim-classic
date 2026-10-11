@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Store Part 7 — The Branch Tooling</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Online Store · Vehicle Workflow Guide</div>
+    <div class="partno">Part 7</div>
+    <h1>The branch tooling: the Web Export Prep add-on and the demo site</h1>
+    <div class="sub">Reference for the two things this guide ships: a Blender add-on that turns the TSC master scene into a web .glb plus manifest in one click, and
+      the <code>store-demo/</code> folder that is a working landing page. How each was tested, how to extend them, and what to script next.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Where the web branch sits in the toolkit</li>
+    <li>Installing and using the add-on</li>
+    <li>What the add-on reads: the tags</li>
+    <li>What the add-on does, step by step</li>
+    <li>What the add-on writes: the manifest</li>
+    <li>The demo site, file by file</li>
+    <li>How it was tested</li>
+    <li>Extending the viewer</li>
+    <li>Further scripts worth writing</li>
+    <li>Known limits</li>
+  </ol></div>
+  <div class="foot">Files: <code>tools/blender/web_export_prep.py</code>, <code>store-demo/</code>, <code>store-demo/test/build_demo.py</code>,
+  <code>store-demo/test/drive.js</code>. Tested with Blender 4.2's Python module and Chromium with WebGL (<span class="pill v">demo</span>).</div>
+</section>
+
+<h1>1 · Where the web branch sits in the toolkit</h1>
+<figure>
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="t7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="70" width="180" height="70" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="100" y="92" text-anchor="middle" font-weight="bold">Master .blend</text>
+  <text x="100" y="108" text-anchor="middle" font-size="8.5">TSC names · actions · props</text>
+  <text x="100" y="124" text-anchor="middle" font-size="8.5" fill="#5b6676">sidebar tab “TSC”</text>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#t7)"><path d="M190,90 C230,40 250,30 288,30"/><path d="M190,105 L288,105"/><path d="M190,120 C230,180 250,180 288,180"/></g>
+  <rect x="290" y="12" width="200" height="36" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="390" y="28" text-anchor="middle" font-size="8.5" font-weight="bold">tsc_toolkit.py</text><text x="390" y="42" text-anchor="middle" font-size="8.5">name check, LOD, pivots → .igs/.ia</text>
+  <rect x="290" y="87" width="200" height="36" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="390" y="103" text-anchor="middle" font-size="8.5" font-weight="bold">tf3_export_prep.py</text><text x="390" y="117" text-anchor="middle" font-size="8.5">rename, tag, FBX per LOD</text>
+  <rect x="290" y="162" width="200" height="36" rx="5" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.8"/><text x="390" y="178" text-anchor="middle" font-size="8.5" font-weight="bold">web_export_prep.py</text><text x="390" y="192" text-anchor="middle" font-size="8.5">filter, decimate, NLA, .glb + manifest</text>
+  <rect x="530" y="150" width="180" height="56" rx="5" fill="#fff" stroke="#177a6e"/>
+  <text x="540" y="168" font-size="8.5" font-weight="bold">store-demo/models/</text><text x="540" y="184" font-size="8.5" font-family="DejaVu Sans Mono">name.glb</text><text x="540" y="198" font-size="8.5" font-family="DejaVu Sans Mono">name.manifest.json</text>
+  <path d="M490,180 L528,180" stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#t7)"/>
+</svg>
+<figcaption><b>Figure 7.1 · Three panels, one tab.</b> All three add-ons register under the same “TSC” sidebar tab, read the same object names and actions, and never
+change the master except to push actions into NLA strips (which TSC export tolerates and TF3 export needs anyway).</figcaption>
+</figure>
+
+<h1>2 · Installing and using the add-on</h1>
+<ol class="steps">
+<li>Blender ▸ Edit ▸ Preferences ▸ Add-ons ▸ <b>Install…</b> ▸ pick <code>tools/blender/web_export_prep.py</code> ▸ tick it. (Same as the other two.)</li>
+<li>In the 3D viewport press <kbd>N</kbd>, open the <b>TSC</b> tab, panel <b>Web viewer</b>.</li>
+<li><b>Output folder:</b> your site's <code>models/</code>. <b>Model name:</b> file stem (<code>little_joe</code>). <b>Triangle budget</b> 60,000. <b>Max texture px</b> 2048.</li>
+<li>Optionally set two scene custom properties (Scene ▸ Custom Properties): <code>web_title</code> and <code>web_blurb</code>; they become the panel text on the page.</li>
+<li>Press <b>Export web GLB + manifest</b>. The status bar shows triangles and hotspot count; the full report is in the Text Editor as <code>Web_Export</code>.</li>
+<li>Add <code>models/little_joe.manifest.json</code> to <code>MODEL_POOL</code> in <code>index.html</code>; run the local server (Part&nbsp;5 §1); click things.</li>
+</ol>
+
+<h1>3 · What the add-on reads: the tags</h1>
+<table>
+<thead><tr><th style="width:32mm">Property</th><th style="width:22mm">On</th><th style="width:44mm">Value</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>web_anim</code></td><td>Object</td><td>clip name, e.g. <code>open_door_l1</code></td><td>The object's action is pushed to an NLA strip of that name; the object becomes a clickable hotspot playing that clip. Several objects may share a name (two pantograph arms = one clip).</td></tr>
+<tr><td><code>web_label</code></td><td>Object</td><td>text, e.g. <code>Door L1</code></td><td>Hover label and button text. If absent, the clip name is prettified (“Open door l1”). The first label given for a clip is used for every object of that clip.</td></tr>
+<tr><td><code>web_hotspot</code></td><td>Object (mesh or empty)</td><td>clip name</td><td>Object has no animation of its own but clicking it plays the clip: a door frame for a door leaf, a pantograph base for its arms, a large invisible box over a thin part.</td></tr>
+<tr><td><code>web_skip</code></td><td>Object</td><td>1</td><td>Left out of the web model even if it would otherwise be included.</td></tr>
+<tr><td><code>web_glass</code></td><td>Material</td><td>1</td><td>Material blend mode set to Alpha Blend before export so windows come through as transparent.</td></tr>
+<tr><td><code>web_title</code>, <code>web_blurb</code></td><td>Scene</td><td>text</td><td>Manifest title and blurb.</td></tr>
+</tbody></table>
+<p><b>Dropped automatically:</b> objects whose name's LOD digit is not 1 (<code>2_…</code>, <code>3_…</code>), names containing <code>shadow_</code>, <code>primarydigits</code>,
+<code>tsc_coupling</code>, <code>tsc_driver</code>, and empties that carry no web tag. Lights, cameras and armature-less bones are not exported.</p>
+
+<h1>4 · What the add-on does, step by step</h1>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <g font-size="8.5">
+  <rect x="10" y="10" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="90" y="30" text-anchor="middle" font-weight="bold">1 · collect objects</text><text x="90" y="46" text-anchor="middle">mesh/empty, not skipped (§3)</text>
+  <rect x="200" y="10" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="30" text-anchor="middle" font-weight="bold">2 · push actions to NLA</text><text x="280" y="46" text-anchor="middle">strip name = web_anim</text>
+  <rect x="390" y="10" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="470" y="30" text-anchor="middle" font-weight="bold">3 · count triangles</text><text x="470" y="46" text-anchor="middle">evaluated, modifiers applied</text>
+  <rect x="580" y="10" width="130" height="50" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="645" y="30" text-anchor="middle" font-weight="bold">over budget?</text><text x="645" y="46" text-anchor="middle">ratio = budget / count</text>
+  <rect x="580" y="90" width="130" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="645" y="110" text-anchor="middle" font-weight="bold">4 · temp Decimate</text><text x="645" y="126" text-anchor="middle">static parts only</text>
+  <rect x="390" y="90" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="470" y="110" text-anchor="middle" font-weight="bold">5 · textures</text><text x="470" y="126" text-anchor="middle">sum MB, warn if > max px</text>
+  <rect x="200" y="90" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="110" text-anchor="middle" font-weight="bold">6 · glass materials</text><text x="280" y="126" text-anchor="middle">web_glass → Alpha Blend</text>
+  <rect x="10" y="90" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="90" y="110" text-anchor="middle" font-weight="bold">7 · frame 0, select set</text><text x="90" y="126" text-anchor="middle">only the collected objects</text>
+  <rect x="10" y="170" width="160" height="50" rx="5" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.8"/><text x="90" y="190" text-anchor="middle" font-weight="bold">8 · export .glb</text><text x="90" y="206" text-anchor="middle">+Y up, NLA tracks, sampled</text>
+  <rect x="200" y="170" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="190" text-anchor="middle" font-weight="bold">9 · remove temp modifiers</text><text x="280" y="206" text-anchor="middle">scene back as it was</text>
+  <rect x="390" y="170" width="160" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="470" y="190" text-anchor="middle" font-weight="bold">10 · bounding box</text><text x="470" y="206" text-anchor="middle">world-space min/max</text>
+  <rect x="580" y="170" width="130" height="50" rx="5" fill="#e5f4f1" stroke="#177a6e" stroke-width="1.8"/><text x="645" y="190" text-anchor="middle" font-weight="bold">11 · manifest.json</text><text x="645" y="206" text-anchor="middle">hotspots, labels, clips</text>
+  <rect x="200" y="250" width="320" height="40" rx="5" fill="#f4f6f9" stroke="#8a96a6"/><text x="360" y="268" text-anchor="middle" font-weight="bold">12 · report → Text Editor “Web_Export” + status bar</text><text x="360" y="282" text-anchor="middle" fill="#5b6676">NLA pushes, triangles, decimation, file size, texture warnings</text>
+  </g>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#f7)">
+    <path d="M170,35 L198,35"/><path d="M360,35 L388,35"/><path d="M550,35 L578,35"/><path d="M645,60 L645,88"/><path d="M580,115 L552,115"/><path d="M390,115 L362,115"/><path d="M200,115 L172,115"/>
+    <path d="M90,140 L90,168"/><path d="M170,195 L198,195"/><path d="M360,195 L388,195"/><path d="M550,195 L578,195"/><path d="M645,220 C645,240 540,240 522,268"/>
+  </g>
+</svg>
+<figcaption><b>Figure 7.2 · The operator, as a flow.</b> Steps 4 and 9 are why the scene is untouched afterwards: the decimation is a temporary modifier on
+non-hotspot meshes only, added before export and removed after.</figcaption>
+</figure>
+<p>The glTF exporter call, so you can match it by hand or change one flag:</p>
+<pre>bpy.ops.export_scene.gltf(
+    filepath=path, export_format=<span class="s">"GLB"</span>, use_selection=<span class="k">True</span>, export_yup=<span class="k">True</span>,
+    export_apply=<span class="k">True</span>, export_animations=<span class="k">True</span>, export_nla_strips=<span class="k">True</span>,
+    export_frame_range=<span class="k">False</span>, export_force_sampling=<span class="k">True</span>,
+    export_image_format=<span class="s">"AUTO"</span>, export_texcoords=<span class="k">True</span>, export_normals=<span class="k">True</span>,
+    export_materials=<span class="s">"EXPORT"</span>, export_draco_mesh_compression_enable=<span class="k">False</span>)</pre>
+<p>A console line saying the Draco library was not found is harmless: compression is off.</p>
+
+<h1>5 · What the add-on writes: the manifest</h1>
+<pre>{
+  <span class="s">"model"</span>: <span class="s">"sample_electric.glb"</span>,            <span class="c">// relative to the manifest</span>
+  <span class="s">"title"</span>: <span class="s">"Class EF-4 \"Little Joe\" Heavy Electric (demo stand-in)"</span>,
+  <span class="s">"blurb"</span>: <span class="s">"Demo model built from primitives …"</span>,
+  <span class="s">"triangles"</span>: <span class="k">816</span>,
+  <span class="s">"bbox"</span>: [[-1.5, -9.0, 0.0], [1.5, 9.025, 4.16]],   <span class="c">// Blender metres, Z up</span>
+  <span class="s">"textureMB"</span>: <span class="k">0.0</span>,
+  <span class="s">"animations"</span>: [<span class="s">"open_door_l1"</span>, <span class="s">"open_door_l2"</span>, <span class="s">"open_door_r1"</span>, <span class="s">"open_door_r2"</span>,
+                 <span class="s">"raise_panto_front"</span>, <span class="s">"raise_panto_rear"</span>, <span class="s">"wipers"</span>],
+  <span class="s">"hotspots"</span>: [
+    { <span class="s">"node"</span>: <span class="s">"1_0500_door_l1"</span>,        <span class="s">"label"</span>: <span class="s">"Door L1"</span>,          <span class="s">"animations"</span>: [<span class="s">"open_door_l1"</span>] },
+    { <span class="s">"node"</span>: <span class="s">"1_0128_panto01_base"</span>,   <span class="s">"label"</span>: <span class="s">"Pantograph front"</span>, <span class="s">"animations"</span>: [<span class="s">"raise_panto_front"</span>] },
+    { <span class="s">"node"</span>: <span class="s">"1_0128_panto01_part01"</span>, <span class="s">"label"</span>: <span class="s">"Pantograph front"</span>, <span class="s">"animations"</span>: [<span class="s">"raise_panto_front"</span>] },
+    …
+  ]
+}</pre>
+<p>It is plain text. You can edit a label, add a second clip to a hotspot's <code>animations</code> list (a door that also lights its step), or write a manifest by hand
+for a model exported some other way. The viewer only needs <code>model</code>, <code>title</code> and <code>hotspots</code>.</p>
+
+<h1>6 · The demo site, file by file</h1>
+<table>
+<thead><tr><th style="width:52mm">File</th><th style="width:22mm">Edit?</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><code>index.html</code></td><td>yes, text</td><td>Landing page: header, hero (stage + panel), catalogue cards, footer. The import map and <code>MODEL_POOL</code> live in its head.</td></tr>
+<tr><td><code>css/site.css</code></td><td>yes, colours</td><td>Dark theme; the five colours are variables at the top. Phone layout under 900 px.</td></tr>
+<tr><td><code>js/viewer.js</code></td><td>rarely</td><td>The viewer (Part&nbsp;4). Exposes <code>window.viewer</code>: <code>load(url)</code>, <code>trigger(node)</code>, <code>manifest</code>, <code>ready</code>, <code>screenPos(node)</code>.</td></tr>
+<tr><td><code>vendor/</code></td><td>no</td><td>three.js 0.170 (MIT): <code>three.module.js</code>, <code>jsm/loaders/GLTFLoader.js</code>, <code>jsm/controls/OrbitControls.js</code>, <code>jsm/utils/BufferGeometryUtils.js</code>, licence file.</td></tr>
+<tr><td><code>models/</code></td><td>add</td><td>Your exports. The demo pair is the primitive loco.</td></tr>
+<tr><td><code>test/build_demo.py</code></td><td>reference</td><td>Builds the primitive loco in Blender, tags it, and runs the add-on headless. A worked example of every tag.</td></tr>
+<tr><td><code>test/drive.js</code></td><td>reference</td><td>Opens the page in headless Chromium, hovers and clicks hotspots, takes the screenshots used in Part&nbsp;4, reports page errors.</td></tr>
+</tbody></table>
+
+<h1>7 · How it was tested</h1>
+<ol class="steps">
+<li><b>Model:</b> <code>test/build_demo.py</code> built a body, roof, four windows (<code>web_glass</code>), four doors with origins on their hinge edges and an opening key at frame 24, two three-axle bogies, two pantographs (lower arm <code>web_anim</code>, upper arm the same name, base <code>web_hotspot</code>), two wipers, plus a <code>shadow_</code> mesh and a <code>tsc_coupling</code> empty that must be dropped.</li>
+<li><b>Export report:</b> 10 actions pushed to NLA strips; 816 triangles (budget 60,000, no decimation); <code>sample_electric.glb</code> 0.09 MB; manifest with 12 hotspot entries and 7 animations. The shadow mesh and coupling empty were not in the .glb.</li>
+<li><b>Browser:</b> <code>test/drive.js</code> loaded the page over the local server, waited for <code>viewer.ready</code>, hovered door R1 (label shown), clicked it (door open, button lit), clicked the pantograph <em>base</em> (arms rose: the <code>web_hotspot</code> path), pressed the “Door L1” button, and took the five screenshots in Part&nbsp;4.</li>
+<li><b>Result:</b> status line “816 triangles · 7 animations · click a part”; seven buttons (one per label, so each pantograph's three nodes gave one button); three marked active; <b>no page errors</b>.</li>
+</ol>
+<p>To repeat it after a change: start the server in <code>store-demo/</code>, then <code>node store-demo/test/drive.js</code> with Playwright on the Node path.</p>
+
+<h1>8 · Extending the viewer</h1>
+<table>
+<thead><tr><th style="width:48mm">Want</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>A viewer on each product page</td><td>Copy <code>index.html</code>, keep the hero, set <code>MODEL_POOL</code> to that vehicle's manifest, replace the cards with the spec and copy from Part&nbsp;2.</td></tr>
+<tr><td>Camera presets (“cab”, “bogie”)</td><td>Add buttons that set <code>camera.position</code> and <code>controls.target</code>; store the positions in the manifest as a <code>views</code> list.</td></tr>
+<tr><td>Sound on click</td><td>In <code>trigger()</code>, <code>new Audio('sfx/door.ogg').play()</code>; put the file name in the hotspot entry.</td></tr>
+<tr><td>Livery switch</td><td>Export the body with two materials, or swap the base-colour texture at run time (<code>TextureLoader</code>) when a swatch is clicked. Keep real railroad schemes out (Part&nbsp;6 §6).</td></tr>
+<tr><td>Wheels turning while idle</td><td>Export a <code>wheels</code> clip and give it <code>LoopRepeat</code> in <code>load()</code> instead of <code>LoopOnce</code>; start it automatically.</td></tr>
+<tr><td>Night mode</td><td>Lower the hemisphere light, raise an emissive on lamp materials (tag <code>web_emissive</code>, add to the add-on in ten lines).</td></tr>
+<tr><td>Draco compression</td><td>Enable it in the exporter and copy three's <code>jsm/libs/draco/</code> into <code>vendor/</code>; set <code>loader.setDRACOLoader(...)</code>. Halves mesh bytes.</td></tr>
+<tr><td>Smaller library download</td><td>Point the import map at a CDN copy of three (cached across sites) instead of <code>vendor/</code>.</td></tr>
+</tbody></table>
+
+<h1>9 · Further scripts worth writing</h1>
+<table>
+<thead><tr><th style="width:52mm">Script</th><th>What it would save</th></tr></thead>
+<tbody>
+<tr><td>Hotspots from TSC control values</td><td>Read the <code>.ia</code> or the blueprint's animation names and propose <code>web_anim</code> tags for every animated object, so a loco already set up for the game needs no manual tagging.</td></tr>
+<tr><td>Batch export the catalogue</td><td>Loop over a folder of master .blend files headless (as <code>build_demo.py</code> does) and regenerate every <code>models/</code> pair in one command, then deploy with the host's CLI.</td></tr>
+<tr><td>Product thumbnail renderer</td><td>Place the camera as <code>frameModel()</code> does, render an Eevee turntable of 8 frames per vehicle for the catalogue cards and the store listing.</td></tr>
+<tr><td>Texture packer for the web</td><td>Reuse the TF3 packer: albedo to JPEG, normal to PNG, roughness = 1 − gloss, cap at 2048 px, report MB per vehicle.</td></tr>
+<tr><td>Manifest validator</td><td>Open the .glb (a glTF is JSON + binary) and check that every hotspot node and animation name exists; run before upload.</td></tr>
+<tr><td>Spec-sheet generator</td><td>From the TSC blueprint values (mass, power, max speed, brake type) write the spec table of the product page so copy and sim never disagree.</td></tr>
+</tbody></table>
+
+<h1>10 · Known limits</h1>
+<ul>
+<li>The add-on exports objects, not armatures: parts animated by bones (valve gear with an armature) export as skinned meshes and play, but hotspot tags must be on the mesh object, not on bones.</li>
+<li>Shape-key animations export; constraint-driven motion (a pantograph upper arm following the lower via a constraint) is sampled and exports correctly, but only if the constraint target is also exported.</li>
+<li>Decimation is uniform per object by ratio; parts that must keep a silhouette should be tagged as hotspots or given <code>web_skip</code> and replaced by a hand-made low version.</li>
+<li>Labels are per clip, not per object, by design (two arms, one button). Give two doors two clips if they need two buttons.</li>
+<li>The demo page is not a store: catalogue cards are placeholders to be replaced by links or embeds from the provider (Part&nbsp;5 §5).</li>
+<li>three.js is pinned at 0.170; a newer copy may rename an addon path. Update all of <code>vendor/</code> together.</li>
+</ul>
+
+</body></html>
