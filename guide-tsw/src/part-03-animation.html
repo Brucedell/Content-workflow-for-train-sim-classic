@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 3 — Animation: Clips Scrubbed by Values</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 3</div>
+    <h1>Animation: clips scrubbed by values</h1>
+    <div class="sub">Nothing on a TSW locomotive plays over time. Wheels are posed from the simulation's axle angle, doors and levers from a control's value, buffers from
+      physics. That is exactly how TSC's <code>.ia</code> animations work, so your existing keyed actions translate almost one for one. This part gives the rules, the
+      map, and the Animation Blueprint that plays the clips.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Three animation channels</li>
+    <li>From object keys to a clip: what the add-on bakes</li>
+    <li>Wheels and rods: Axles list or one-revolution clip</li>
+    <li>Doors, levers, needles, pantographs: VHID clips</li>
+    <li>Bogies and buffers: the engine does them</li>
+    <li>Wheels and valve gear in three games</li>
+    <li>The TSC → TSW animation map</li>
+    <li>The Animation Blueprint (RailVehicleAnimInstance)</li>
+    <li>Keying rules and troubleshooting</li>
+  </ol></div>
+  <div class="foot">The anim-instance variables and Thomas's AnimGraph were read from the compiled <code>ABP_ART_Thomas_Ext</code> (<span class="pill v">verified</span>). The clip
+  baking and FBX round-trip were tested in Blender (<span class="pill v">tested</span>). Which axis the engine spins <code>Axles</code> bones about was not checked (<span class="pill u">check</span>).</div>
+</section>
+
+<h1>1 · Three animation channels</h1>
+<figure>
+<svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <text x="10" y="18" font-weight="bold" fill="#177a6e">A · simulation-driven (wheels, rods)</text>
+  <rect x="10" y="26" width="150" height="44" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="85" y="44" text-anchor="middle" font-size="8.5">SimuGraph node Axle2</text><text x="85" y="58" text-anchor="middle" font-size="8.5">WheelRotation_DEG 0..360</text>
+  <rect x="190" y="26" width="170" height="44" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="275" y="44" text-anchor="middle" font-size="8.5">ABP binding → AxleRotationAlpha</text><text x="275" y="58" text-anchor="middle" font-size="8.5">= deg / 360</text>
+  <rect x="390" y="26" width="170" height="44" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="475" y="44" text-anchor="middle" font-size="8.5">Sequence Evaluator (normalised)</text><text x="475" y="58" text-anchor="middle" font-size="8.5">Wheels_FullRotation at time = alpha</text>
+  <rect x="590" y="26" width="120" height="44" rx="5" fill="#fff" stroke="#8a96a6"/><text x="650" y="44" text-anchor="middle" font-size="8.5">or: Axles list,</text><text x="650" y="58" text-anchor="middle" font-size="8.5">engine spins bones</text>
+  <text x="10" y="100" font-weight="bold" fill="#1f6fb2">B · VHID-driven (doors, levers, needles, pantographs)</text>
+  <rect x="10" y="108" width="150" height="44" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="85" y="126" text-anchor="middle" font-size="8.5">RVM component CabDoor_L</text><text x="85" y="140" text-anchor="middle" font-size="8.5">output 0 = closed … 1 = open</text>
+  <rect x="190" y="108" width="200" height="44" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="290" y="126" text-anchor="middle" font-size="8.5">ABP VirtualHIDSequenceEntries</text><text x="290" y="140" text-anchor="middle" font-size="8.5">"CabDoor_L" → Door_L1.anim</text>
+  <rect x="420" y="108" width="190" height="44" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="515" y="126" text-anchor="middle" font-size="8.5">engine evaluates the clip at</text><text x="515" y="140" text-anchor="middle" font-size="8.5">time = value (0.5 = half open)</text>
+  <text x="10" y="182" font-weight="bold" fill="#a86400">C · physics-driven (bogies, buffers, body sway)</text>
+  <rect x="10" y="190" width="150" height="44" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="85" y="208" text-anchor="middle" font-size="8.5">physics body on the track,</text><text x="85" y="222" text-anchor="middle" font-size="8.5">buffer compression</text>
+  <rect x="190" y="190" width="200" height="44" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="290" y="208" text-anchor="middle" font-size="8.5">ABP lists: Bogies, BufferBones,</text><text x="290" y="222" text-anchor="middle" font-size="8.5">Body_Pivot</text>
+  <rect x="420" y="190" width="190" height="44" rx="5" fill="#fff" stroke="#8a96a6"/><text x="515" y="208" text-anchor="middle" font-size="8.5">no clip at all: the parent class</text><text x="515" y="222" text-anchor="middle" font-size="8.5">poses the bones from physics</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#a3)"><path d="M160,48 L188,48"/><path d="M360,48 L388,48"/><path d="M160,130 L188,130"/><path d="M390,130 L418,130"/><path d="M160,212 L188,212"/><path d="M390,212 L418,212"/></g>
+</svg>
+<figcaption><b>Figure 3.1 · The three channels.</b> You author clips for A and B; C needs only correctly named bones. A clip is never “played”: it is a lookup table from a
+value to a pose. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>2 · From object keys to a clip: what the add-on bakes</h1>
+<p>In the master scene a door is an object with rotation keys on frames 0–24. In TSW the door is a bone, and its clip must hold the same motion as pose-bone keys. The add-on
+samples every frame, computes the object's motion relative to frame 0 in the bone's frame (through any moving parent, so a pantograph's upper arm bakes correctly under its
+lower arm), and writes location/rotation/scale keys with linear interpolation into an action named after the clip. One action can hold several bones (both pantograph arms
+share <code>Pantograph_F</code>). Each action is exported as its own FBX with the take named after the clip, so the editor imports <code>Door_L1</code>, not <code>Armature|Scene</code>.
+<span class="pill v">tested</span>: the baked pose matched the object's world motion to 1e-4 at every sampled frame, including the child-of-bone case, and the clips survived an FBX round trip.</p>
+<figure>
+<svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <rect x="10" y="20" width="210" height="80" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="115" y="40" text-anchor="middle" font-weight="bold">object keys</text>
+  <text x="20" y="58" font-family="DejaVu Sans Mono" font-size="8.5">1_0500_door_l1</text><text x="20" y="72" font-family="DejaVu Sans Mono" font-size="8.5">rot Z  f0: 0°   f24: 80°</text><text x="20" y="90" font-size="8.5" fill="#5b6676">or an NLA strip "open_door_l1"</text>
+  <text x="250" y="64" font-size="16" fill="#5b6676">→</text>
+  <rect x="280" y="20" width="210" height="80" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="385" y="40" text-anchor="middle" font-weight="bold">action Door_L1 (armature)</text>
+  <text x="290" y="58" font-family="DejaVu Sans Mono" font-size="8.5">pose.bones["door_l1"]</text><text x="290" y="72" font-family="DejaVu Sans Mono" font-size="8.5">quat keys f0..f24, linear</text><text x="290" y="90" font-size="8.5" fill="#5b6676">name from tsw_clip › web_anim › action</text>
+  <text x="520" y="64" font-size="16" fill="#5b6676">→</text>
+  <rect x="550" y="20" width="160" height="80" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="630" y="40" text-anchor="middle" font-weight="bold">Animation/Door_L1.fbx</text>
+  <text x="560" y="58" font-size="8.5">take "Door_L1", 25 frames</text><text x="560" y="72" font-size="8.5">imports as AnimSequence</text><text x="560" y="90" font-size="8.5" fill="#5b6676">VHID 0..1 → time 0..1</text>
+</svg>
+<figcaption><b>Figure 3.2 · One clip's journey.</b> The clip's length in frames does not matter to the game; only its first and last pose do, because it is scrubbed normalised.</figcaption>
+</figure>
+
+<h1>3 · Wheels and rods: Axles list or one-revolution clip</h1>
+<p>Two mechanisms exist and Thomas uses both: <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:44mm">Mechanism</th><th>How</th><th style="width:48mm">Use it for</th></tr></thead>
+<tbody>
+<tr><td><code>Axles.Entries</code> on the ABP</td><td>List the axle bones (<code>axle1, axle2…</code>). The parent class rotates them from the matching SimuGraph axle every frame; no clip needed.</td><td>Diesels, electrics, wagons: plain wheelsets.</td></tr>
+<tr><td><code>Wheels_FullRotation</code> clip</td><td>A clip holding exactly one revolution of everything that turns with the wheels: wheels, crank pins, rods, pistons. Scrubbed by <code>WheelRotation_DEG / 360</code>.</td><td>Steam: rods and valve gear; anything geared to the wheels.</td></tr>
+</tbody></table>
+<p>The add-on always writes <code>Wheels_FullRotation</code>: if the scene has a clip of that name it is baked from your keys (rods included); otherwise it generates one that turns
+every axle bone 0→360° about its Y axis over 60 frames, forward roll for +X travel (<span class="pill v">tested</span>: the wheel top moves +X). Frame 0 and the last frame are
+identical poses, as the clip must loop. Which local axis the <code>Axles</code> mechanism spins is not documented; the clip route is exact regardless, which is why the guide
+recommends exporting it anyway. <span class="pill u">check</span></p>
+
+<h1>4 · Doors, levers, needles, pantographs: VHID clips</h1>
+<p>Every control-driven part is the same recipe: one clip from closed/zero/lowered at frame 0 to open/full/raised at the last frame, and one entry in the ABP's
+<code>VirtualHIDSequenceEntries</code> mapping the RVM component name to the clip. The engine evaluates the clip at time = the VHID's output value.</p>
+<table>
+<thead><tr><th style="width:36mm">Part</th><th style="width:40mm">VHID component (RVM)</th><th style="width:36mm">Clip</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Cab doors</td><td><code>CabDoor_L</code>, <code>CabDoor_R</code> (RailVehicleDoorComponent)</td><td><code>Door_L1</code>, <code>Door_R1</code></td><td>Door state machine outputs 0..1 over <code>transition_time</code>.</td></tr>
+<tr><td>Throttle, reverser, brake handles</td><td><code>ThrottleControl</code>… (IrregularLever)</td><td><code>Throttle</code>…</td><td>In the <b>cab</b> ABP; for a −1..1 lever the clip runs full-back to full-forward and the ABP uses the normalised output.</td></tr>
+<tr><td>Gauge needles</td><td>a VHID or a sim parameter</td><td><code>Needle_Speed</code>…</td><td>Thomas keys <code>CabNeedle_L/M/R</code> bones; needles driven from a sim value need a small ABP binding like the wheels.</td></tr>
+<tr><td>Pantograph</td><td><code>PantographControl</code> (PushButton toggle or lever)</td><td><code>Pantograph_F</code></td><td>Both arms and the head in one clip; the add-on bakes the whole linkage.</td></tr>
+<tr><td>Wipers</td><td><code>Wipers</code> (PushButton / WiperComponent)</td><td><code>wipers</code></td><td>A cyclic clip is scrubbed by a sawtooth value; the clip should return to rest at the end.</td></tr>
+<tr><td>Coupler hook</td><td>coupled state</td><td>in the coupler's own ABP</td><td>Separate small skeletal mesh (ConnectionSkeletalMesh).</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">Tag the component name in Blender</span><p>Give each control-driven object a <code>tsw_vhid</code> property with the RVM component name it will be driven by
+(<code>CabDoor_L</code>, <code>ThrottleControl</code>). The build sheet then lists the <code>VirtualHIDSequenceEntries</code> you have to type: component → clip.</p></div>
+
+<h1>5 · Bogies and buffers: the engine does them</h1>
+<p>List the bogie bones in <code>Bogies.Entries</code> and the buffer bones in <code>BufferBones</code>. The parent class yaws bogies to follow the track under the body and translates
+buffer bones by the compression the physics component computes from the buffer stiffness. No clip, no keys. TSC's rule that the XML pivot wins is replaced by the bone
+position: put the bogie object's origin at the real pivot before exporting. <span class="pill v">verified</span> (Thomas's lists; bogies empty on a rigid-frame engine).</p>
+
+<h1>6 · Wheels and valve gear in three games</h1>
+<table>
+<thead><tr><th style="width:30mm"></th><th style="width:48mm">Train Sim Classic</th><th style="width:48mm">Transport Fever 3</th><th>Train Sim World</th></tr></thead>
+<tbody>
+<tr><td>Wheels</td><td>Game rotates <code>boNNwhNN</code> nodes from speed and radius; no animation authored</td><td><code>wheels</code> event animation: one turn keyed, game loops it by distance</td><td>Engine spins <code>Axles</code> bones from the SimuGraph axle, or scrubs the one-turn clip</td></tr>
+<tr><td>Rods / valve gear</td><td>Named rod nodes driven by the game's valve-gear system from wheel angle</td><td>Keyed in the same <code>wheels</code> animation</td><td>Keyed in <code>Wheels_FullRotation</code>, scrubbed by the axle angle</td></tr>
+<tr><td>Authoring</td><td>Nothing</td><td>One cyclic action</td><td>One cyclic action (or none for plain wheelsets)</td></tr>
+<tr><td>Shared source</td><td colspan="3">One action in the master named <code>Wheels_FullRotation</code> (or tagged <code>tsw_clip</code>) serves TF3's wheels strip and TSW's clip; TSC ignores it.</td></tr>
+</tbody></table>
+
+<h1>7 · The TSC → TSW animation map</h1>
+<table>
+<thead><tr><th style="width:52mm">TSC animation (.ia, driven by)</th><th style="width:44mm">TSW</th><th>Translation</th></tr></thead>
+<tbody>
+<tr><td>Door animation ← control value</td><td>Door clip ← RailVehicleDoorComponent</td><td>Same keys; frame 0 closed.</td></tr>
+<tr><td>Pantograph ← <code>PantographControl</code></td><td>Pantograph clip ← VHID</td><td>Same keys, whole linkage in one clip.</td></tr>
+<tr><td>Cab lever ← Regulator / Reverser / TrainBrakeControl</td><td>Lever clip ← IrregularLever (cab ABP)</td><td>Same keys; value map on the RVM decides notches.</td></tr>
+<tr><td>Needle ← speedometer control value</td><td>Needle clip ← sim parameter binding or VHID</td><td>Same keys; needs a binding in the cab ABP.</td></tr>
+<tr><td>Wipers ← Wipers control value</td><td>Wipers clip ← Wipers VHID</td><td>Same keys.</td></tr>
+<tr><td>Trolley pole ← custom control values (Lua)</td><td>Pole clip ← a custom VHID; logic in SimuGraph / event graph</td><td>Keys translate; the Lua becomes Blueprint (Part&nbsp;5 §7).</td></tr>
+<tr><td>Wheel nodes (no animation)</td><td>Axles list / Wheels_FullRotation</td><td>Generated by the add-on.</td></tr>
+<tr><td>Bogie pivots from XML</td><td>Bogies list</td><td>Bone position is the pivot.</td></tr>
+<tr><td>Lights (control values → material)</td><td>Headlights VHID → LinearElectricLight → light/emissive</td><td>No animation; Part&nbsp;6.</td></tr>
+</tbody></table>
+
+<h1>8 · The Animation Blueprint (RailVehicleAnimInstance)</h1>
+<p>Every skeletal mesh on the RVV uses an Animation Blueprint whose parent class is <code>RailVehicleAnimInstance</code>, not the plain AnimInstance. The parent adds four
+lists and a graph node that does the work. Thomas's entire exterior ABP: <span class="pill v">verified</span></p>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="g3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="60" width="110" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="65" y="84" text-anchor="middle" font-size="8.5">Mesh Ref Pose</text>
+  <rect x="150" y="60" width="130" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="215" y="78" text-anchor="middle" font-size="8.5">Apply Additive</text><text x="215" y="92" text-anchor="middle" font-size="8.5">alpha 1</text>
+  <rect x="150" y="130" width="200" height="50" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="250" y="148" text-anchor="middle" font-size="8.5">Sequence Evaluator (normalised)</text><text x="250" y="162" text-anchor="middle" font-size="8.5">Wheels_FullRotation</text><text x="250" y="174" text-anchor="middle" font-size="8.5">explicit time = AxleRotationAlpha</text>
+  <rect x="310" y="60" width="170" height="40" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="395" y="78" text-anchor="middle" font-size="8.5" font-weight="bold">VehicleAnimGroupEvaluation</text><text x="395" y="92" text-anchor="middle" font-size="8.5">Axles · Bogies · Buffers · VHID clips</text>
+  <rect x="510" y="60" width="110" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="565" y="84" text-anchor="middle" font-size="8.5">Component To Local</text>
+  <rect x="650" y="60" width="60" height="40" rx="5" fill="#fff" stroke="#8a96a6"/><text x="680" y="84" text-anchor="middle" font-size="8.5">Output</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#g3)"><path d="M120,80 L148,80"/><path d="M280,80 L308,80"/><path d="M480,80 L508,80"/><path d="M620,80 L648,80"/><path d="M250,130 L230,102"/></g>
+  <rect x="10" y="10" width="340" height="36" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="20" y="26" font-size="8.5" font-weight="bold">Event graph</text><text x="20" y="40" font-size="8.5">binding Simulation_Axle2_WheelRotation_DEG → AxleRotationAlpha = value / 360</text>
+  <text x="400" y="26" font-size="8.5" font-weight="bold">Class defaults (per LOD)</text>
+  <text x="400" y="40" font-size="8.5">Axles.Entries · Bogies.Entries · BufferBones · VirtualHIDSequenceEntries</text>
+</svg>
+<figcaption><b>Figure 3.3 · The whole exterior ABP.</b> Five graph nodes, one variable, one binding. The cab ABP is the same with lever clips in its VHID entries and no wheel evaluator.</figcaption>
+</figure>
+<table>
+<thead><tr><th style="width:52mm">Parent-class property</th><th>Meaning / Thomas value</th></tr></thead>
+<tbody>
+<tr><td><code>Axles.Entries[]</code></td><td>Bones the engine spins from axle rotation: <code>axle1, axle2, axle3, axle_Rod_L, axle_Rod_R</code>.</td></tr>
+<tr><td><code>Bogies.Entries[]</code></td><td>Bones yawed to follow the track. Empty on Thomas.</td></tr>
+<tr><td><code>BufferBones[]</code></td><td><code>buffer_fl, buffer_fr, buffer_bl, buffer_br</code>.</td></tr>
+<tr><td><code>VirtualHIDSequenceEntries[]</code></td><td>Per LOD: {Component (RVM VHID name), Sequence}. <code>CabDoor_L → CabDoor_L.anim</code>, <code>CabDoor_R → CabDoor_R.anim</code>.</td></tr>
+<tr><td><code>CachedModelActor</code></td><td>Runtime pointer to the RVM, resolved for you.</td></tr>
+</tbody></table>
+<p>The simulation value arrives through a <b>property binding</b>: a variable of the struct type {NodeReference(“Simulation”, “Axle2”), ParameterReference(“WheelRotation_DEG”)}
+that the parent class evaluates every frame. The build sheet lists the axle names so you know which node to bind.</p>
+<div class="box"><span class="t">What the wagon stream adds about the lists</span><p>On creating the ABP (parent <code>RailVehicleAnimInstance</code>) the editor <b>auto-filled</b> four Axles entries and two
+Bogies entries from the bone names. The wheels still did not turn in Play until two more things were set: the ABP's <b>model actor</b> reference (the wagon's RVM class), and, on <em>each</em>
+Axles and Bogies entry, the simulation component (<code>Simulation</code>) and the SimuGraph node it belongs to (bone <code>Axle1</code> ↔ node <code>Axle1</code>, bone <code>Bogie1</code> ↔ node
+<code>Bogie1</code>). So an entry is “bone + sim node”, not just a bone. After that, wheels and bogies moved with no clip at all. <span class="pill c">community</span></p></div>
+
+<h1>9 · Keying rules and troubleshooting</h1>
+<table>
+<thead><tr><th style="width:52mm">Rule</th><th>Because</th></tr></thead>
+<tbody>
+<tr><td>Frame 0 = rest (closed, lowered, zero); last frame = fully open/raised/full</td><td>The clip is scrubbed 0..1 by the value.</td></tr>
+<tr><td>Linear interpolation, no overshoot</td><td>A value of 0.5 must look half-way; eased keys make the HUD and the mesh disagree.</td></tr>
+<tr><td>Wheels_FullRotation starts and ends on the same pose</td><td>It wraps at 360°.</td></tr>
+<tr><td>One clip per control, named like the control</td><td>The VHID entry maps one component to one sequence.</td></tr>
+<tr><td>Keep object-level keys in the master; never key the preview rig</td><td>The rig is rebuilt from the master on every export.</td></tr>
+</tbody></table>
+<table>
+<thead><tr><th style="width:52mm">Symptom in the editor</th><th>Cause and fix</th></tr></thead>
+<tbody>
+<tr><td>Door swings about the wrong point</td><td>Object origin not on the hinge in the master.</td></tr>
+<tr><td>Part jumps when the vehicle spawns</td><td>Frame 0 is not the rest pose; or the clip was keyed from an already-open state.</td></tr>
+<tr><td>Wheels turn backwards</td><td>Clip direction; re-export with the generated clip, or flip the sign of the keyed rotation.</td></tr>
+<tr><td>Clip imports named “Armature|Scene”</td><td>Exported by hand without renaming the scene; the add-on names the take after the clip. Rename the asset in the editor.</td></tr>
+<tr><td>Pantograph head stays behind when the arms rise</td><td>The head was weighted to Body_Pivot: it must be a child of the upper arm in the master.</td></tr>
+<tr><td>Lever moves but the HUD value does not</td><td>The ABP entry points at the view hitbox name, not the RVM component name.</td></tr>
+</tbody></table>
+
+</body></html>

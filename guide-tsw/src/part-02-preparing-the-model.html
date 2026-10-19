@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 2 — Preparing the Shared Model</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 2</div>
+    <h1>Preparing the shared model: objects become bones</h1>
+    <div class="sub">The one real difference between this branch and the others: TSW wants a <em>skinned skeletal mesh</em>, not a hierarchy of objects. This part shows what the
+      skeleton must look like, how the TSC hierarchy maps onto it, the sockets and collision the editor expects, materials and units, and the export settings. The add-on
+      (Part&nbsp;7) does all of it on a temporary copy; read this to know what it did and how to tag the few things it cannot guess.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Objects → bones: the conversion in one picture</li>
+    <li>Skeleton conventions</li>
+    <li>Which objects become bones</li>
+    <li>Weights: one bone per part</li>
+    <li>Sockets</li>
+    <li>Buffers, couplers and the physics box</li>
+    <li>Collision: the UCX mesh</li>
+    <li>The cab as a second mesh</li>
+    <li>Materials and textures for Unreal</li>
+    <li>Units, axes and handedness</li>
+    <li>LODs</li>
+    <li>Export settings, by hand and with the add-on</li>
+    <li>Checklist</li>
+  </ol></div>
+  <div class="foot">Skeleton and socket conventions come from <code>SK_ART_T_Ext</code> as read in the editor (<span class="pill v">verified</span>). The conversion, weighting, socket
+  placement and FBX round-trip were tested headless in Blender 4.2 on a synthetic locomotive (<span class="pill v">tested</span>); what the TSW importer does with the result is
+  marked <span class="pill u">check</span>.</div>
+</section>
+
+<h1>1 · Objects → bones: the conversion in one picture</h1>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b0304a"/></marker></defs>
+  <rect x="10" y="10" width="300" height="280" rx="7" fill="#fdf3e2" stroke="#a86400"/>
+  <text x="160" y="30" text-anchor="middle" font-weight="bold">TSC master: objects (Outliner)</text>
+  <g font-family="DejaVu Sans Mono" font-size="8.5">
+  <text x="22" y="52">1_0500_engine                 (body, static)</text>
+  <text x="22" y="66">├─ 1_0500_door_l1            keys 0→24</text>
+  <text x="22" y="80">├─ 1_0500_door_r1            keys 0→24</text>
+  <text x="22" y="94">├─ 1_0500_bo01               (bogie, static)</text>
+  <text x="22" y="108">│  ├─ 1_0500_bo01wh01        wheel</text>
+  <text x="22" y="122">│  ├─ 1_0500_bo01wh02        wheel</text>
+  <text x="22" y="136">│  └─ 1_0500_bo01wh03        wheel</text>
+  <text x="22" y="150">├─ 1_0128_panto01_base       static</text>
+  <text x="22" y="164">│  └─ 1_0128_panto01_part01  keys 0→30</text>
+  <text x="22" y="178">│     └─ panto01_part02      keys 0→30</text>
+  <text x="22" y="192">│        └─ panto01_head     static</text>
+  <text x="22" y="206">├─ 1_0500_buffer_fl …        static</text>
+  <text x="22" y="220">├─ tsc_driver  (empty)</text>
+  <text x="22" y="234">├─ tsc_coupling_front (empty)</text>
+  <text x="22" y="248">└─ 1_0064_wiper01_l          keys 0→24</text>
+  </g>
+  <text x="22" y="276" font-size="8.5" fill="#5b6676">one object per moving part, origin on the hinge</text>
+  <path d="M312,150 L406,150" stroke="#b0304a" stroke-width="2" fill="none" marker-end="url(#c2)"/>
+  <text x="360" y="140" text-anchor="middle" font-size="8.5" fill="#b0304a" font-weight="bold">add-on</text>
+  <rect x="410" y="10" width="300" height="280" rx="7" fill="#fbeaee" stroke="#b0304a" stroke-width="1.5"/>
+  <text x="560" y="30" text-anchor="middle" font-weight="bold">TSW: one mesh + one armature</text>
+  <g font-family="DejaVu Sans Mono" font-size="8.5">
+  <text x="422" y="52">Armature</text>
+  <text x="422" y="66">└─ Root</text>
+  <text x="422" y="80">   └─ Body_Pivot      ← body, base, head weighted here</text>
+  <text x="422" y="94">      ├─ door_l1      ← clip Door_L1</text>
+  <text x="422" y="108">      ├─ door_r1      ← clip Door_R1</text>
+  <text x="422" y="122">      ├─ bogie1       ← Bogies list (engine yaws it)</text>
+  <text x="422" y="136">      │  ├─ axle1     ← Axles list / Wheels_FullRotation</text>
+  <text x="422" y="150">      │  ├─ axle2       SOCKET_Wheel_L2 / R2 on bogie1</text>
+  <text x="422" y="164">      │  └─ axle3</text>
+  <text x="422" y="178">      ├─ panto01_part01   ← clip Pantograph_F</text>
+  <text x="422" y="192">      │  └─ panto01_part02  (head weighted here)</text>
+  <text x="422" y="206">      ├─ buffer_fl …  ← BufferBones (engine compresses)</text>
+  <text x="422" y="220">      ├─ wiper01_l    ← clip wipers</text>
+  <text x="422" y="234">      SOCKET_DriverSeat  SOCKET_Coupler_F/B</text>
+  <text x="422" y="248">SK_MyLoco_Ext  (all meshes joined, vertex groups = bones)</text>
+  </g>
+  <text x="422" y="276" font-size="8.5" fill="#5b6676">static parts weight to the nearest bone ancestor</text>
+</svg>
+<figcaption><b>Figure 2.1 · The same hierarchy, re-expressed.</b> Every animated or wheel/bogie/buffer object becomes a bone at its origin; static children ride on their
+parent's bone; everything else is welded to <code>Body_Pivot</code>. The object keys become pose-bone keys, one action per clip. Nothing in the master is changed.</figcaption>
+</figure>
+
+<h1>2 · Skeleton conventions</h1>
+<p>Thomas's exterior skeleton, as read from the editor, is the pattern to copy: <span class="pill v">verified</span></p>
+<pre>Root
+  Skeleton
+    Body_Pivot                       whole body; sway and buffer offsets apply here
+      buffer_fl  buffer_fr  buffer_bl  buffer_br
+      CabDoor_L  CabDoor_R
+      CabNeedle_L  CabNeedle_M  CabNeedle_R
+      PistonRod_FL  PistonRod_FR
+      axle1  axle2  axle3             rotate about Y (the axle axis)
+      axle_Rod_L  axle_Rod_R          crank pins
+      ConectingRod_FL/FR/ML/MR/BL/BR
+Sockets:  Wheel_L1 Wheel_R1 Wheel_L2 Wheel_R2 Wheel_L3 Wheel_R3   (VFX at rail contact)
+          DriverSeat  SecondmanSeat                                 (crew placement)
+          AudioChuff  AudioRunning  AudioWhistle  AudioSteam        (RVA attach points)</pre>
+<table>
+<thead><tr><th style="width:40mm">Rule</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>One armature, <code>Root</code> at the world origin, <code>Body_Pivot</code> as its child</td><td>The engine moves the whole vehicle by the actor; body sway and buffer offsets are applied at Body_Pivot.</td></tr>
+<tr><td>Axle bones <code>axle1..n</code>, front to back, head on the axle centre line</td><td>Listed in the ABP's <code>Axles</code> so the engine can spin them; the add-on makes the bone span the wheelset.</td></tr>
+<tr><td>Bogie bones <code>bogie1..n</code> at the bogie pivot, axles as their children</td><td>Listed in <code>Bogies</code>; the engine yaws them to follow the track.</td></tr>
+<tr><td><code>buffer_fl/fr/bl/br</code> at each buffer head</td><td>Listed in <code>BufferBones</code>; the engine translates them by buffer compression.</td></tr>
+<tr><td>Any other moving part: one bone at the object's origin, parent = nearest moving ancestor</td><td>Doors, levers, pantograph arms, wipers, needles. The clip for that part rotates this bone.</td></tr>
+<tr><td>All bones world-aligned: X forward, Y left, Z up (roll 0, pointing +Y)</td><td>One rule for every bone; no per-bone axis puzzles. Rotations are baked into the clips, so bone orientation is cosmetic. <span class="pill u">check</span> against how the <code>Axles</code> spin axis is chosen (Part&nbsp;3 §3).</td></tr>
+<tr><td>Bone names are free except the lists above</td><td>The VHID→clip mapping is by component and sequence name, not bone name. The add-on keeps TSC base names (<code>door_l1</code>).</td></tr>
+</tbody></table>
+<div class="box"><span class="t">A wagon's skeleton, built live on stream</span><p>The community creator's hopper used the smallest possible rig: <code>Root</code> at the origin, <code>Bogie1</code> and
+<code>Bogie2</code> as its children (Ctrl-P ▸ <i>Keep Offset</i>) at the bogie pivots, and <code>Axle1..4</code> as children of their bogie bone; bone height is cosmetic, so he lifted
+them to wheel level. Vertex groups: each wheel to its axle group, the rest of each bogie to its bogie group, the whole body to the root. Then join into one mesh and parent to the
+armature with empty groups. In the editor the Animation Blueprint later found “4 axles and 2 bogies” by itself from those bone names, so the <code>axleN</code> / <code>bogieN</code>
+convention is more than a convention: the engine looks for it. <span class="pill c">community</span></p></div>
+
+<h1>3 · Which objects become bones</h1>
+<table>
+<thead><tr><th style="width:52mm">Object</th><th style="width:34mm">Becomes</th><th>How the add-on decides</th></tr></thead>
+<tbody>
+<tr><td>Wheel objects <code>…bo01wh01</code></td><td>bone <code>axleN</code></td><td>Name pattern; numbered by position, front first.</td></tr>
+<tr><td>Bogie objects <code>…bo01</code></td><td>bone <code>bogieN</code></td><td>Name pattern; axles under it become its children.</td></tr>
+<tr><td>Objects with “buffer” in the name</td><td>bone <code>buffer_fl</code>…</td><td>Side from the object position.</td></tr>
+<tr><td>Any object with keyframes or an NLA strip</td><td>bone named after the TSC base name</td><td>Doors, pantograph arms, wipers, levers, needles. Shares the clip name of its action/strip.</td></tr>
+<tr><td>Object with <code>tsw_bone</code> property</td><td>bone with that name</td><td>Force a bone (a part the game will move later) or rename one.</td></tr>
+<tr><td>Static child of a moving object (pantograph head)</td><td>no bone; weighted to the parent's bone</td><td>Walks up the hierarchy.</td></tr>
+<tr><td>Body, roof, static detail</td><td>no bone; weighted to <code>Body_Pivot</code></td><td>Everything else.</td></tr>
+<tr><td>LOD 2+ twins, <code>shadow_</code>, <code>primarydigits</code>, <code>light_fwd/rev</code>, <code>tsw_skip</code></td><td>dropped</td><td>TSC-only; UE handles LODs, shadows, lights and numbering itself.</td></tr>
+<tr><td>Empties</td><td>sockets or build-sheet numbers</td><td>§5 and §6.</td></tr>
+</tbody></table>
+<div class="box rule"><span class="t">Origins on hinges, frame 0 is rest</span><p>The same two rules as TSC and TF3. A bone is placed at the object's origin, and the clip's first frame is
+the rest pose, so a door with its origin on the hinge and frame 0 closed converts without any manual fixing. A door keyed from frame 1 still works (frame 0 holds the first key).</p></div>
+
+<h1>4 · Weights: one bone per part</h1>
+<p>TSW vehicles are rigid assemblies, so skinning is trivial: every vertex belongs 100% to exactly one bone. The add-on gives each copied object a vertex group named after
+its bone (or its ancestor's bone, or <code>Body_Pivot</code>) with weight 1.0, then joins all copies into one mesh with an Armature modifier. If you rig by hand: Ctrl-P ▸
+<i>With Empty Groups</i>, then assign each part's vertices to its group with weight 1. Never use automatic weights on a locomotive.</p>
+
+<h1>5 · Sockets</h1>
+<p>A socket is an empty named <code>SOCKET_&lt;name&gt;</code> parented to a bone (Object ▸ Parent ▸ Bone). The FBX exporter writes it under that bone and the UE importer turns it
+into a skeleton socket called <code>&lt;name&gt;</code>. <span class="pill u">check</span></p>
+<table>
+<thead><tr><th style="width:44mm">Socket</th><th style="width:34mm">Parent bone</th><th>Where it comes from</th></tr></thead>
+<tbody>
+<tr><td><code>Wheel_L1..n</code>, <code>Wheel_R1..n</code></td><td>the wheel's bogie bone, else Body_Pivot</td><td>Generated from each wheel mesh: at the axle X, the wheel's outer face Y, the rail contact Z. Must not spin with the axle (sparks and spray spawn here).</td></tr>
+<tr><td><code>DriverSeat</code></td><td>Body_Pivot</td><td>Your <code>tsc_driver</code> empty. Add a <code>socket_SecondmanSeat</code> empty for a second seat.</td></tr>
+<tr><td><code>Coupler_F</code>, <code>Coupler_B</code></td><td>Body_Pivot</td><td>Your <code>tsc_coupling_front/rear</code> empties; the coupler view mesh attaches here.</td></tr>
+<tr><td><code>Lever_Throttle</code>, <code>Lever_Reverser</code>…</td><td>the lever's bone, else Body_Pivot</td><td>Empties named <code>socket_Lever_Throttle</code> (or <code>tsw_socket</code> property) where the hitbox should sit.</td></tr>
+<tr><td><code>AudioRunning</code>, <code>AudioWhistle</code>, <code>AudioChuff</code>…</td><td>Body_Pivot</td><td>Empties named <code>socket_Audio…</code>; the RVA attaches its audio components here.</td></tr>
+</tbody></table>
+
+<h1>6 · Buffers, couplers and the physics box</h1>
+<p>The physics component wants numbers, not geometry: the body box (width, height, length in metres), the physics body and centre-of-mass offsets (X along, Z up), buffer
+offsets and sizes, coupler pivot and receiving points (X along, Y up, metres). The add-on measures them and writes <code>&lt;Name&gt;.tsw_build.json</code>; Part&nbsp;4 §6 is where
+you type them. Mass is not in Blender: take it from your TSC engine blueprint.</p>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <rect x="60" y="40" width="600" height="60" rx="4" fill="#fbeaee" stroke="#b0304a"/>
+  <rect x="40" y="55" width="20" height="30" fill="#fff" stroke="#b0304a"/><rect x="660" y="55" width="20" height="30" fill="#fff" stroke="#b0304a"/>
+  <circle cx="160" cy="105" r="12" fill="#fff" stroke="#5b6676"/><circle cx="200" cy="105" r="12" fill="#fff" stroke="#5b6676"/><circle cx="520" cy="105" r="12" fill="#fff" stroke="#5b6676"/><circle cx="560" cy="105" r="12" fill="#fff" stroke="#5b6676"/>
+  <line x1="0" y1="117" x2="720" y2="117" stroke="#5b6676"/>
+  <circle cx="360" cy="117" r="3" fill="#b0304a"/><text x="366" y="130" font-size="8.5" fill="#b0304a">origin (rail level, mid-length)</text>
+  <circle cx="360" cy="70" r="3" fill="#1f6fb2"/><text x="366" y="66" font-size="8.5" fill="#1f6fb2">PhysicsBodyOffset (0, z)</text>
+  <circle cx="360" cy="82" r="3" fill="#177a6e"/><text x="366" y="92" font-size="8.5" fill="#177a6e">CentreOfMass (0, ~0.4 h)</text>
+  <text x="50" y="35" font-size="8.5">buffer_bl/br</text><text x="640" y="35" font-size="8.5">buffer_fl/fr</text>
+  <text x="30" y="130" font-size="8.5">SOCKET_Coupler_B</text><text x="620" y="130" font-size="8.5">SOCKET_Coupler_F</text>
+  <text x="360" y="20" text-anchor="middle" font-size="8.5" fill="#5b6676">Length = X extent · Height = Z extent · Width = Y extent (metres) → Node.Length / Height / Width</text>
+</svg>
+<figcaption><b>Figure 2.2 · The numbers the physics component wants, and where the add-on measures them.</b> Keep the TSC convention: origin at rail level, mid-vehicle.</figcaption>
+</figure>
+
+<h1>7 · Collision: the UCX mesh</h1>
+<p>Walkable collision is a separate low-poly static mesh (<code>UCX_MyLoco_Collision</code>): a box for the body plus a flat slab for the footplate or walkways. It is <em>not</em>
+the skeletal mesh's physics asset. Tag the objects with a <code>tsw_collision</code> property; the add-on joins them and exports a static-mesh FBX. If nothing is tagged it exports
+the body bounding box so the pipeline still runs. In the editor the mesh is set to use complex collision as simple. <span class="pill v">verified</span> that the Class&nbsp;47 and Thomas use a UCX mesh; <span class="pill u">check</span> the collision setting.</p>
+
+<h1>8 · The cab as a second mesh</h1>
+<p>The cab interior is a second skeletal mesh (<code>SK_MyLoco_Cab</code>) on the <em>same skeleton</em>, with its own ABP. Put the cab objects in a collection and name it in the
+add-on's <i>Cab collection</i> field (or tag objects <code>tsw_cab</code>). Cab levers and needles are moving objects, so they become bones and their TSC control animations become
+clips exactly like the doors. On import, set the cab's <i>Skeleton</i> to the exterior's skeleton so both meshes share bones. <span class="pill u">check</span></p>
+
+<h1>9 · Materials and textures for Unreal</h1>
+<table>
+<thead><tr><th style="width:44mm">Unreal material input</th><th style="width:44mm">Blender Principled input</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Base Color</td><td>Base Color</td><td>sRGB. Reuse the TF3 albedo.</td></tr>
+<tr><td>Normal</td><td>Normal Map</td><td>UE expects DirectX convention (green down). A Blender/TF3/glTF bake is OpenGL (green up): tick <i>Flip Green Channel</i> on the texture in UE. <span class="pill u">check</span></td></tr>
+<tr><td>Occlusion / Roughness / Metallic</td><td>AO, Roughness, Metallic</td><td>UE packs R=AO, G=Roughness, B=Metallic (“ORM”), linear. Roughness = 1 − TF3 gloss; the TF3 packer script can produce it.</td></tr>
+<tr><td>Emissive</td><td>Emission</td><td>Lamps; driven later by LinearElectricLight parameters.</td></tr>
+</tbody></table>
+<p>The FBX carries material <em>names</em> and base-colour textures (path mode Copy); UE creates placeholder materials on import. Build the real master material in the editor once
+(<code>M_Master</code>) and make instances per sheet. Keep the material count per mesh low: each is a section and a draw call.</p>
+<div class="box tip"><span class="t">Three habits from the stream</span><ul>
+<li>Connect only the base colour in Blender; wire normal and packed maps in the editor's material editor, which is quicker for this.</li>
+<li><b>Untick sRGB on every packed/parameter texture</b> (ORM, metal, roughness, AO) after import, or the PBR look is wrong. Only base colour stays sRGB.</li>
+<li>Moving textures and materials between folders in the Content Browser keeps every reference, so sort them into <code>Textures/</code> and <code>Materials/</code> after import. If you
+texture a new model, Substance Painter's “Unreal Engine 4 (Packed)” export preset writes the ORM directly.</li>
+</ul><p><span class="pill c">community</span></p></div>
+
+<h1>10 · Units, axes and handedness</h1>
+<ul>
+<li><b>Units:</b> the editor is centimetres. Model in metres as before; export with <i>Apply Unit</i> on and <i>Apply Scalings = FBX All</i>, which writes centimetres into the file without scaling the armature. A 6 m loco imports as 600 units. <span class="pill u">check</span></li>
+<li><b>Forward:</b> UE is +X forward. The branch rotates the TSC model (+Y forward) by −90° about Z, as the TF3 branch does.</li>
+<li><b>Handedness:</b> UE is left-handed. Leave the FBX exporter's axis settings at their defaults (−Z forward, Y up); the importer's own conversion then maps Blender +X→+X, +Z→+Z and +Y→−Y. Your left-hand door stays on the left; only numbers you type by hand need Y negated.</li>
+<li><b>Apply transforms</b> on the master as for the other games; the add-on copies evaluated meshes, so modifiers are baked.</li>
+<li><b>If the vehicle imports a hundred times too big, or sits away from the origin:</b> transforms were not applied, or the unit scale did not reach the file. Apply all transforms,
+re-export with FBX All (or set the scene unit scale to 0.01 as the streamer's exporter add-on suggested), and re-import. Both symptoms happened live and both went away on re-export. <span class="pill c">community</span></li>
+</ul>
+
+<h1>11 · LODs</h1>
+<p>Only the LOD-1 objects are exported. Unreal generates reduced LODs for skeletal meshes in the editor (LOD Settings ▸ number of LODs, reduction per level), and the
+<code>ComponentLODManagement</code> component on the RVV switches off lights, Niagara and the cab mesh by distance. If you want hand-made LODs, import them as extra LOD levels on the
+skeletal mesh asset from separate FBX files of your TSC LOD-2/3 twins (same skeleton). <span class="pill u">check</span></p>
+
+<h1>12 · Export settings, by hand and with the add-on</h1>
+<div class="two">
+<div>
+<h3>By hand (File ▸ Export ▸ FBX)</h3>
+<ul>
+<li>Selected objects: armature + mesh + socket empties</li>
+<li>Object types: Armature, Mesh, Empty</li>
+<li>Transform: Scale 1.0, <b>Apply Scalings: FBX All</b>, Forward −Z, Up Y (defaults), Apply Unit ✓</li>
+<li>Geometry: Smoothing Face, Apply Modifiers ✓</li>
+<li>Armature: Primary Y, Secondary X, <b>Add Leaf Bones ✗</b>, <b>Only Deform Bones ✗</b></li>
+<li>Animation: ✗ for the mesh file; ✓ for each clip file with the scene range set to the clip and the clip as the active action (the take is named after the scene)</li>
+<li>Path mode Copy, embed ✗</li>
+<li>Alternative: the free <i>Blender for Unreal Engine</i> add-on (Xavier Loux) marks an object as Skeletal Mesh, checks for “potential errors” (unit scale, unapplied transforms) and
+exports into an <code>ExportedFbx</code> folder next to the .blend. The streamer used it; it does not build the rig, so it suits a hand-rigged model. <span class="pill c">community</span></li>
+</ul>
+</div>
+<div>
+<h3>With the add-on (Part&nbsp;7)</h3>
+<ul>
+<li>TSC sidebar ▸ <b>TSW branch</b> ▸ Export root, Name, Cab collection</li>
+<li><b>Preview rig in scene</b>: inspect bones, groups, sockets, scrub the clips, then delete the <code>_tsw_export</code> collection</li>
+<li><b>Export TSW FBX set + build sheet</b>: writes <code>SK_Name_Ext.fbx</code>, <code>SK_Name_Cab.fbx</code>, <code>Animation/*.fbx</code> (one per clip, take named after the clip), <code>UCX_Name_Collision.fbx</code>, <code>Name.tsw_build.json</code></li>
+<li>Report in the Text Editor as <code>TSW_Export</code></li>
+</ul>
+</div>
+</div>
+
+<h1>13 · Checklist</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Item</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>Origins on hinges and axle centres; frame 0 is the rest pose; transforms applied</td></tr>
+<tr><td>☐</td><td>Wheels named <code>boNNwhNN</code>, bogies <code>boNN</code>; buffers have “buffer” in the name</td></tr>
+<tr><td>☐</td><td>Every moving part keyed (or an NLA strip) with a clip name worth keeping (<code>tsw_clip</code> if the action name is poor)</td></tr>
+<tr><td>☐</td><td>Empties: <code>tsc_driver</code>, <code>tsc_coupling_front/rear</code>, <code>socket_Lever_*</code>, <code>socket_Audio*</code></td></tr>
+<tr><td>☐</td><td>Collision objects tagged <code>tsw_collision</code>; cab objects in the cab collection</td></tr>
+<tr><td>☐</td><td>Preview rig looks right: bones at hinges, clips scrub, sockets where expected</td></tr>
+<tr><td>☐</td><td>Exported set in the plugin's folder layout; build sheet opened for Part&nbsp;4</td></tr>
+</tbody></table>
+
+</body></html>

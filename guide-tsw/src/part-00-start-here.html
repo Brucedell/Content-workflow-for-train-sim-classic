@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 0 — Start Here</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide (branch of the TSC workflow)</div>
+    <div class="partno">Part 0</div>
+    <h1>Start here: the same model, a third game</h1>
+    <div class="sub">How the Blender train that already goes into Train Sim Classic and Transport Fever&nbsp;3 also becomes a Train Sim World vehicle through the
+      TSW PC Editor (Unreal Engine 4.26): where this branch leaves the shared scene, what TSW wants that the others do not, and the vocabulary you need before Part&nbsp;1.</div>
+  </div>
+  <div class="toc">
+    <h3>The TSW guide set</h3>
+    <table>
+      <thead><tr><th style="width:18mm">Part</th><th style="width:62mm">Title</th><th>What you get from it</th></tr></thead>
+      <tbody>
+        <tr><td><b>0</b></td><td>Start Here</td><td>The branch point, three games side by side, the four-asset family, the plugin folder, conventions, glossary.</td></tr>
+        <tr><td><b>1</b></td><td>What a TSW Vehicle Actually Is</td><td>Model/view split, how a key press becomes a turning wheel, the RVD and RVM field by field, your TSC knowledge mapped onto TSW.</td></tr>
+        <tr><td><b>2</b></td><td>Preparing the Shared Model</td><td>Objects become bones: the skeleton, weights, sockets, collision, cab mesh, materials, units and axes, export settings.</td></tr>
+        <tr><td><b>3</b></td><td>Animation: Clips Scrubbed by Values</td><td>Wheels, doors, levers, pantographs; the TSC animation map; the Animation Blueprint that plays them.</td></tr>
+        <tr><td><b>4</b></td><td>The Editor: Blueprints and Data</td><td>Plugin, import, ABP, RVV, RVM, physics numbers, seat and camera, RVD and formation, Play In Editor.</td></tr>
+        <tr><td><b>5</b></td><td>Simulation and Controls</td><td>SimuGraph nodes and the minimal graph, VHID pairs, presets, and what happens to your TSC Lua.</td></tr>
+        <tr><td><b>6</b></td><td>View Polish, Audio, Test, Ship</td><td>Lights, particles, collision and LOD, the RVA, pre-flight checklist, troubleshooting, distribution.</td></tr>
+        <tr><td><b>7</b></td><td>The Branch Tooling</td><td>TSW Export Prep add-on (objects → bones), the build sheet, the editor-side Python helper, test results, further scripts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot">Sources: the supplied <i>TSW Locomotives: Data Structure and Boilerplate Guide</i> (a live inspection of the PC Editor 4.26.1 with Thomas, the Class&nbsp;47 and the
+  Class&nbsp;08), a community livestream converting a hopper wagon to TSW&nbsp;5, and the TSC / TF3 sets here. <span class="pill v">verified</span> = read from the running editor;
+  <span class="pill u">check</span> = inferred or untested; <span class="pill c">community</span> = worked on the streamer's machine, not verified here; <span class="pill v">tested</span> = the Blender side, run headless here.</div>
+</section>
+
+<h1>Where the pipelines branch</h1>
+<p>All three games want the same thing from Blender first: a clean, correctly scaled model with named parts and keyed moving pieces. Then they part company.
+TSC wants an <code>.igs</code> and XML blueprints; TF3 wants FBX files per LOD and its Model Editor metadata; <b>TSW wants one skeletal mesh with an armature,
+a set of short animation clips, and a family of Unreal Blueprints and data assets that you build in the editor</b>. The web viewer takes a glTF. One master scene feeds all four.</p>
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="80" width="170" height="100" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="95" y="102" text-anchor="middle" font-weight="bold">Shared master scene</text>
+  <text x="22" y="120" font-size="8.8">TSC names (1_0500_…), +Y forward,</text><text x="22" y="134" font-size="8.8">metres, LOD twins, actions keyed</text><text x="22" y="148" font-size="8.8">per control value (frame = value),</text><text x="22" y="162" font-size="8.8">driver / coupling empties</text>
+  <circle cx="215" cy="130" r="12" fill="#16324f"/><text x="215" y="134" text-anchor="middle" fill="#fff" font-weight="bold">⑂</text>
+  <line x1="180" y1="130" x2="201" y2="130" stroke="#16324f" stroke-width="2"/>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#a0)"><path d="M227,118 C250,40 260,24 290,24"/><path d="M227,124 C250,80 260,80 290,80"/><path d="M227,136 C250,180 260,180 290,180"/><path d="M227,142 C250,236 260,236 290,236"/></g>
+  <rect x="292" y="8" width="190" height="32" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="387" y="28" text-anchor="middle" font-size="9">TSC · .igs + XML + Lua  (guide/)</text>
+  <rect x="292" y="64" width="190" height="32" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="387" y="84" text-anchor="middle" font-size="9">TF3 · FBX per LOD + .mdl  (guide-tf3/)</text>
+  <rect x="292" y="164" width="190" height="32" rx="5" fill="#fbeaee" stroke="#b0304a" stroke-width="1.8"/><text x="387" y="184" text-anchor="middle" font-size="9" font-weight="bold">TSW · skeletal FBX + Blueprints</text>
+  <rect x="292" y="220" width="190" height="32" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="387" y="240" text-anchor="middle" font-size="9">Web · .glb + manifest  (guide-store/)</text>
+  <rect x="500" y="130" width="210" height="100" rx="6" fill="#fff" stroke="#b0304a"/>
+  <text x="510" y="148" font-weight="bold">The TSW branch adds</text>
+  <text x="510" y="164" font-size="8.8">• an armature: one bone per moving part</text>
+  <text x="510" y="178" font-size="8.8">• clips scrubbed by a value, not by time</text>
+  <text x="510" y="192" font-size="8.8">• sockets (seat, wheels, levers, audio)</text>
+  <text x="510" y="206" font-size="8.8">• a walkable collision mesh</text>
+  <text x="510" y="220" font-size="8.8">• everything else is built in the editor</text>
+</svg>
+<figcaption><b>Figure 0.1 · One scene, four outputs.</b> The TSW branch is the only one that needs a <em>rig</em>. The add-on in Part&nbsp;7 builds it on a temporary copy from
+the same object hierarchy and the same keyed actions, so the master scene stays the TSC master.</figcaption>
+</figure>
+
+<h1>Three games side by side</h1>
+<table>
+<thead><tr><th style="width:34mm">Question</th><th style="width:44mm">Train Sim Classic</th><th style="width:44mm">Transport Fever 3</th><th>Train Sim World</th></tr></thead>
+<tbody>
+<tr><td>What is a vehicle?</td><td>A blueprint graph (engine, sim, bogies) referencing an .igs and a Lua script</td><td>A .mdl file: node tree + metadata structs</td><td>Four assets: <b>RVD</b> (definition), <b>RVM</b> (model/brain), <b>RVV</b> (view/body), <b>RVA</b> (audio), plus a SimuGraph asset</td></tr>
+<tr><td>Geometry format</td><td>.igs via BRIAGE; LODs by name prefix</td><td>FBX per LOD; the Model Editor compiles .msh</td><td>FBX <b>skeletal mesh</b> (one mesh, one armature); LODs generated in the editor or imported</td></tr>
+<tr><td>Forward axis / units</td><td>+Y forward, metres</td><td>+X forward, metres</td><td>+X forward, Z up, <b>centimetres</b>; Y runs to the right (left-handed)</td></tr>
+<tr><td>Moving parts</td><td>Named objects, animated by control values</td><td>Named nodes, event animations</td><td><b>Bones</b>; clips scrubbed by simulation values or control values</td></tr>
+<tr><td>Wheels</td><td>Game rotates <code>bo01wh01</code> nodes</td><td><code>wheels</code> event animation</td><td>Engine spins the <code>Axles</code> bones, or scrubs a one-revolution clip from the axle angle</td></tr>
+<tr><td>Physics</td><td>Sim blueprint numbers + curves</td><td>Four numbers (power, tractive effort, speed, weight)</td><td><b>SimuGraph</b>: a node graph (motor, gearbox, axles, brakes, air) integrated every frame; plus a simple-physics block</td></tr>
+<tr><td>Controls</td><td>Control values on a bus; cab via .ia animations</td><td>None (AI driven)</td><td><b>VHID</b> pairs: logic component on the RVM + click hitbox on the RVV</td></tr>
+<tr><td>Scripting</td><td>Lua per vehicle</td><td>Lua transformators (construction time)</td><td>Blueprint event graph (visual); physics logic belongs in the SimuGraph</td></tr>
+<tr><td>Testing</td><td>Launch game, LogMate</td><td>Model Editor validation, in-game</td><td><b>Play In Editor</b> on a route, Output Log, Python inspection</td></tr>
+<tr><td>Shipping</td><td>.rwp package</td><td>mod folder / mod.io</td><td>Content plugin, cooked and distributed as a DLC folder with a community packer (Part&nbsp;6 §8) <span class="pill c">community</span></td></tr>
+</tbody></table>
+
+<h1>The four-asset family</h1>
+<figure>
+<svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <defs><marker id="b0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="230" y="10" width="260" height="62" rx="7" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.5"/>
+  <text x="360" y="30" text-anchor="middle" font-weight="bold">RVD_MyLoco · definition (data asset)</text>
+  <text x="360" y="46" text-anchor="middle" font-size="8.8">name, category, max speed, thumbnail, coupling rules</text>
+  <text x="360" y="60" text-anchor="middle" font-size="8.8">→ ModelActorAsset = RVM · ViewActorAsset = RVV · Additional = [RVA]</text>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#b0)"><path d="M300,72 L140,108"/><path d="M360,72 L360,108"/><path d="M420,72 L580,108"/></g>
+  <rect x="20" y="110" width="220" height="110" rx="7" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+  <text x="130" y="130" text-anchor="middle" font-weight="bold">RVM · model, the brain</text>
+  <text x="30" y="148" font-size="8.8">Simulation component → SimuGraph</text>
+  <text x="30" y="162" font-size="8.8">physics body: size, mass, buffers</text>
+  <text x="30" y="176" font-size="8.8">VHID logic: levers, buttons, doors</text>
+  <text x="30" y="190" font-size="8.8">couplers, hoses, seat manager</text>
+  <text x="30" y="204" font-size="8.8">event graph: controls → simulation</text>
+  <text x="130" y="238" text-anchor="middle" font-size="8.5" fill="#1f6fb2" font-weight="bold">lives for the whole session</text>
+  <rect x="250" y="110" width="220" height="110" rx="7" fill="#e6f4ea" stroke="#1e6b35" stroke-width="1.5"/>
+  <text x="360" y="130" text-anchor="middle" font-weight="bold">RVV · view, the body</text>
+  <text x="260" y="148" font-size="8.8">skeletal meshes (exterior, cab)</text>
+  <text x="260" y="162" font-size="8.8">animation blueprints (wheels, doors)</text>
+  <text x="260" y="176" font-size="8.8">VHID hitboxes, seats, cameras</text>
+  <text x="260" y="190" font-size="8.8">lights, smoke, collision, LOD</text>
+  <text x="260" y="204" font-size="8.8">← this is where your Blender work goes</text>
+  <text x="360" y="238" text-anchor="middle" font-size="8.5" fill="#1e6b35" font-weight="bold">spawned when near, destroyed when far</text>
+  <rect x="480" y="110" width="220" height="110" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="590" y="130" text-anchor="middle" font-weight="bold">RVA · audio, the voice (optional)</text>
+  <text x="490" y="148" font-size="8.8">sound cues + attenuation</text>
+  <text x="490" y="162" font-size="8.8">listens to speed thresholds</text>
+  <text x="490" y="176" font-size="8.8">and VHID clicks (horn, doors)</text>
+  <text x="490" y="190" font-size="8.8">attaches to Audio* sockets on the RVV</text>
+  <text x="590" y="238" text-anchor="middle" font-size="8.5" fill="#a86400" font-weight="bold">comes and goes with the RVV</text>
+  <text x="360" y="262" text-anchor="middle" font-size="8.5" fill="#5b6676">Formations (FRM_) list RVDs; timetables and the spawn menu only ever see the RVD.  <tspan font-weight="bold">verified</tspan></text>
+</svg>
+<figcaption><b>Figure 0.2 · One rail vehicle = one RVD pointing at an RVM, an RVV and optionally an RVA.</b> Everything that must remember state (throttle, doors, lights)
+lives on the RVM because the RVV can be thrown away at distance. Part&nbsp;1 explains the split; Parts&nbsp;4–6 build each box. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>Your TSC vocabulary, translated</h1>
+<table>
+<thead><tr><th style="width:52mm">In TSC you know…</th><th style="width:52mm">In TSW it is…</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>cEngineBlueprint / cWagonBlueprint</td><td>RVD + the RVM's physics component</td><td>Name, category, max speed, mass, size, buffers, couplers.</td></tr>
+<tr><td>cEngineSimBlueprint, curves</td><td>SimuGraph (SA_ asset)</td><td>A node graph instead of numbered components; the <code>SimplePhysics</code> block is the closest thing to the TSC sim numbers.</td></tr>
+<tr><td>.igs geometry + LOD name prefixes</td><td>SK_ skeletal mesh + skeleton; LOD levels in the editor</td><td>One mesh for the exterior, one for the cab, both on the same skeleton.</td></tr>
+<tr><td>.ia animation driven by a control value</td><td>Animation clip scrubbed by a VHID output</td><td>Almost a 1:1 translation; Part&nbsp;3.</td></tr>
+<tr><td>Control value on the bus</td><td>VHID component's output value</td><td>Set by keyboard, mouse-drag or Blueprint; read by the sim, the view and the audio.</td></tr>
+<tr><td>Lua engine script</td><td>RVM event graph + SimuGraph nodes</td><td>Glue goes in the graph; physics goes in the SimuGraph. Part&nbsp;5.</td></tr>
+<tr><td>Bogey blueprints + wheel nodes</td><td>Axles / Bogies bone lists on the Animation Blueprint</td><td>The engine spins axle bones and yaws bogie bones for you.</td></tr>
+<tr><td>Driver empty, coupling empties</td><td>Sockets: DriverSeat, Coupler_F/B</td><td>Exported with the skeleton; the add-on makes them from your TSC empties.</td></tr>
+<tr><td>LogMate</td><td>Output Log, <code>obj dump</code>, Python</td><td>The editor can be interrogated live; Part&nbsp;6.</td></tr>
+</tbody></table>
+
+<h1>The plugin folder</h1>
+<p>Your vehicle is a <b>content plugin</b> (Edit ▸ Plugins ▸ New Plugin ▸ Content Only). Never put files in <code>/Game/</code> or in a Dovetail DLC folder. The layout
+below is Thomas's real plugin and the wiki's recommended shape; the add-on's output and the editor helper (Part&nbsp;7) follow it. <span class="pill v">verified</span></p>
+<pre>/MyLoco/                                  content plugin root (mounts as /MyLoco/)
+  Data/RVD/        RVD_MyLoco  FRM_MyLoco  + thumbnail
+  Simulation/      RVM_MyLoco  SA_MyLoco
+  View/            RVV_MyLoco
+    Models/Exterior/   SK_MyLoco_Ext  SK_MyLoco_Ext_Skeleton  ABP_MyLoco_Ext  Animation/*
+    Models/Cab/        SK_MyLoco_Cab  ABP_MyLoco_Cab
+    Models/Collision/  UCX_MyLoco_Collision
+    Materials/         M_* MI_*
+  Audio/RVA/       RVA_MyLoco      Audio/Cues/  SC_*     Audio/Curves/  FC_*</pre>
+
+<h1>Conventions used in this set</h1>
+<table>
+<thead><tr><th style="width:40mm">Convention</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Prefixes</td><td><code>RVD_ RVM_ RVV_ RVA_ SA_ SK_ SM_ ABP_ SC_ FC_ M_/MI_ UCX_ FRM_ WBP_</code>: definition, model, view, audio, simulation asset, skeletal/static mesh, anim blueprint, sound cue, float curve, material, collision, formation, widget. <span class="pill v">verified</span></td></tr>
+<tr><td>Suffixes</td><td><code>_F/_B</code> front/back, <code>_L/_R</code> left/right; a control in both cabs is <code>Throttle_F</code> and <code>Throttle_B</code>.</td></tr>
+<tr><td>Axes</td><td>UE: X forward, Y right, Z up, centimetres. Blender after the branch rotation: X forward, Y <em>left</em>, Z up, metres. A Blender point (x, y, z) m is (100x, −100y, 100z) cm in the editor. <span class="pill u">check</span></td></tr>
+<tr><td>Bones</td><td><code>Root → Body_Pivot → …</code>; axles <code>axle1..n</code> front to back; bogies <code>bogie1..n</code>; buffers <code>buffer_fl/fr/bl/br</code>; all other bones keep the TSC base name.</td></tr>
+<tr><td>Sockets</td><td>Empties named <code>SOCKET_&lt;name&gt;</code> parented to a bone; the importer turns them into skeleton sockets named <code>&lt;name&gt;</code>.</td></tr>
+<tr><td>Figures</td><td>Blue = RVM, green = RVV, orange = RVA, purple = data, crimson = the Blender side.</td></tr>
+<tr><td><span class="pill v">verified</span> / <span class="pill u">check</span> / <span class="pill c">community</span></td><td>Read from the running editor by the inspection this set is based on / inferred or untested, confirm in your editor / done on stream by a community creator and worth copying.</td></tr>
+</tbody></table>
+
+<h1>Glossary</h1>
+<table>
+<thead><tr><th style="width:44mm">Term</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>PC Editor</td><td>Dovetail's Unreal 4.26 editor build of TSW (project <code>TS2Prototype</code>) that loads the game content and lets you add plugins and play routes in the editor.</td></tr>
+<tr><td>RVD / RVM / RVV / RVA</td><td>Rail Vehicle Definition / Model / View / Audio. Figure 0.2.</td></tr>
+<tr><td>SimuGraph, SA</td><td>Dovetail's node-based physics simulation and the asset that stores one graph. Nodes are axles, motors, cylinders, valves; Blueprints read and write named parameters.</td></tr>
+<tr><td>VHID</td><td>Virtual Human Interface Device: any control the player can touch. A logic component on the RVM paired by name with a hitbox component on the RVV.</td></tr>
+<tr><td>Interaction environment</td><td>A position a person can occupy (driver, second man, guard). Controls, seats and cameras belong to one; keys only work in the one you occupy.</td></tr>
+<tr><td>Input identifier</td><td>The string that maps a keyboard binding to a VHID: <code>SimpleThrottle</code>, <code>Throttle</code>, <code>Reverser</code>, <code>TrainBrake</code>, <code>Horn</code>, <code>Headlights</code>.</td></tr>
+<tr><td>Animation Blueprint (ABP)</td><td>The graph that poses a skeletal mesh each frame. TSW's parent class <code>RailVehicleAnimInstance</code> does the axle spinning, bogie yaw, buffer compression and VHID clip scrubbing.</td></tr>
+<tr><td>Socket</td><td>A named attachment point on a bone (seat, wheel contact, lever, audio).</td></tr>
+<tr><td>UCX mesh</td><td>A separate low-poly static mesh used as walkable collision (and sometimes audio occlusion).</td></tr>
+<tr><td>Preset</td><td>Either a SimuGraph state snapshot (Parked / RunningStopped / RunningActive) or a bundle of VHID target values on the physics component (Headlights On…).</td></tr>
+<tr><td>Formation</td><td>Ordered list of RVDs that spawns as one train. Nothing spawns an RVD directly.</td></tr>
+<tr><td>Cooked</td><td>Editor data stripped. Dovetail's shipped vehicles are cooked: you can spawn and read them, not open their graphs. Your plugin is source.</td></tr>
+<tr><td>Play In Editor (PIE)</td><td>Pressing Play on a route inside the editor; your vehicle can be spawned and driven without packaging.</td></tr>
+</tbody></table>
+
+<div class="box"><span class="t">How to use this set</span><p>Read Part&nbsp;1 once so the editor's vocabulary is not a wall. Do Part&nbsp;2 with the add-on on your real model and look at the
+preview rig in Blender. Follow Part&nbsp;4 step by step with the build sheet open; a box on two axles that drives is the goal of the first session. Part&nbsp;5 is where
+the loco gets its character; Part&nbsp;6 is polish; Part&nbsp;7 is the reference for the tools.</p></div>
+
+</body></html>

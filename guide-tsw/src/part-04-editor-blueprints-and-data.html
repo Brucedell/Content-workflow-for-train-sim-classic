@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 4 — The Editor: Blueprints and Data</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 4</div>
+    <h1>The editor: from FBX files to a vehicle that spawns</h1>
+    <div class="sub">The Blender side is done; everything from here happens in the TSW PC Editor. This part is the build order for a minimum locomotive: plugin, import,
+      Animation Blueprint, RVV, RVM, physics numbers, seat and camera, RVD and formation, Play In Editor. Controls and the SimuGraph are Part&nbsp;5; do them right after
+      §7 of this part. Each step is testable on its own.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Build order</li>
+    <li>Plugin and folders</li>
+    <li>Import the FBX set</li>
+    <li>The Animation Blueprints</li>
+    <li>The RVV Blueprint</li>
+    <li>The RVM Blueprint and the physics numbers</li>
+    <li>Environment, seat and camera</li>
+    <li>RVD and formation</li>
+    <li>Play In Editor</li>
+    <li>Growth path</li>
+  </ol></div>
+  <div class="foot">Steps follow the community wiki's “Setting up a Rail Vehicle” guide where it exists and otherwise the structure read out of Thomas, the Class&nbsp;47 and the
+  12-ton van (<span class="pill v">verified</span>). The editor-side Python helper (Part&nbsp;7) automates §2, §3 and §8 but was written here without running the editor
+  (<span class="pill u">check</span>).</div>
+</section>
+
+<h1>1 · Build order</h1>
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.8">
+  <defs><marker id="o4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <g>
+  <rect x="10" y="20" width="105" height="54" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="62" y="38" text-anchor="middle" font-weight="bold">1 Blender</text><text x="62" y="52" text-anchor="middle">add-on export</text><text x="62" y="66" text-anchor="middle">(Parts 2–3)</text>
+  <rect x="130" y="20" width="105" height="54" rx="5" fill="#fff" stroke="#8a96a6"/><text x="182" y="38" text-anchor="middle" font-weight="bold">2 Plugin</text><text x="182" y="52" text-anchor="middle">folders</text>
+  <rect x="250" y="20" width="105" height="54" rx="5" fill="#fff" stroke="#8a96a6"/><text x="302" y="38" text-anchor="middle" font-weight="bold">3 Import</text><text x="302" y="52" text-anchor="middle">SK, clips, UCX</text>
+  <rect x="370" y="20" width="105" height="54" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="422" y="38" text-anchor="middle" font-weight="bold">4 ABP</text><text x="422" y="52" text-anchor="middle">RailVehicleAnimInstance</text>
+  <rect x="490" y="20" width="105" height="54" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="542" y="38" text-anchor="middle" font-weight="bold">5 RVV</text><text x="542" y="52" text-anchor="middle">SK_RailVehicle,</text><text x="542" y="66" text-anchor="middle">collision, blockers</text>
+  <rect x="610" y="20" width="105" height="54" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="662" y="38" text-anchor="middle" font-weight="bold">6 RVM</text><text x="662" y="52" text-anchor="middle">Simulation, couplers,</text><text x="662" y="66" text-anchor="middle">physics numbers</text>
+  <rect x="610" y="110" width="105" height="54" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="662" y="128" text-anchor="middle" font-weight="bold">7 SA + VHIDs</text><text x="662" y="142" text-anchor="middle">Part 5</text>
+  <rect x="490" y="110" width="105" height="54" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="542" y="128" text-anchor="middle" font-weight="bold">8 Seat + camera</text><text x="542" y="142" text-anchor="middle">environment</text>
+  <rect x="370" y="110" width="105" height="54" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="422" y="128" text-anchor="middle" font-weight="bold">9 RVD + FRM</text><text x="422" y="142" text-anchor="middle">data assets</text>
+  <rect x="250" y="110" width="105" height="54" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="302" y="128" text-anchor="middle" font-weight="bold">10 Play In Editor</text><text x="302" y="142" text-anchor="middle">spawn, board, drive</text>
+  <rect x="130" y="110" width="105" height="54" rx="5" fill="#fff" stroke="#8a96a6"/><text x="182" y="128" text-anchor="middle" font-weight="bold">11 Grow</text><text x="182" y="142" text-anchor="middle">cab, doors, lights,</text><text x="182" y="156" text-anchor="middle">audio (Part 6)</text>
+  </g>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#o4)"><path d="M115,47 L128,47"/><path d="M235,47 L248,47"/><path d="M355,47 L368,47"/><path d="M475,47 L488,47"/><path d="M595,47 L608,47"/><path d="M662,74 L662,108"/><path d="M610,137 L597,137"/><path d="M490,137 L477,137"/><path d="M370,137 L357,137"/><path d="M250,137 L237,137"/></g>
+  <text x="10" y="190" fill="#5b6676">Do not model the cab, lights or audio until step 10 works. A box on two axles that drives is the first milestone.</text>
+</svg>
+<figcaption><b>Figure 4.1 · Eleven steps.</b> Steps 2, 3 and 9 are scripted by the editor helper; 4–8 are clicks in the editor with the build sheet open.</figcaption>
+</figure>
+
+<h1>2 · Plugin and folders</h1>
+<div class="box tip"><span class="t">Before the first launch</span><p>Run the game itself once before starting the editor; the editor can refuse to start (or show a dialog to confirm) until the game
+has initialised its files. The editor opens on the <b>frontend level</b>, the menu scene: nothing is built there. Open a route map (the Training Center map is a good test bed) and, before
+any Blueprint exists, drag the imported skeletal mesh into it to check scale and materials. <span class="pill c">community</span></p></div>
+<ol class="steps">
+<li>Edit ▸ Plugins ▸ <b>New Plugin</b> ▸ Content Only ▸ name <code>MyLoco</code>. Never put files in <code>/Game/</code> or in a DLC folder.</li>
+<li>Content Browser ▸ View Options ▸ <b>Show Plugin Content</b>; open <i>MyLoco Content</i>.</li>
+<li>Create the folders from Part&nbsp;0: <code>Data/RVD</code>, <code>Simulation</code>, <code>View/Models/Exterior</code>, <code>View/Models/Exterior/Animation</code>, <code>View/Models/Cab</code>, <code>View/Models/Collision</code>, <code>View/Materials</code>, <code>Audio/RVA</code>, <code>Audio/Cues</code>. (The helper script makes them.)</li>
+</ol>
+
+<h1>3 · Import the FBX set</h1>
+<table>
+<thead><tr><th style="width:48mm">File</th><th style="width:40mm">Into</th><th>Import settings</th></tr></thead>
+<tbody>
+<tr><td><code>SK_MyLoco_Ext.fbx</code></td><td>View/Models/Exterior</td><td>Skeletal Mesh ✓, Skeleton: none (creates <code>SK_MyLoco_Ext_Skeleton</code>), Import Animations ✗, Use T0 As Ref Pose ✓, Create Physics Asset ✓, Materials ✓ the first time. Check the skeleton's socket list afterwards. <span class="pill u">check</span></td></tr>
+<tr><td><code>SK_MyLoco_Cab.fbx</code></td><td>View/Models/Cab</td><td>Same, but <b>Skeleton = SK_MyLoco_Ext_Skeleton</b>.</td></tr>
+<tr><td><code>Animation/*.fbx</code></td><td>View/Models/Exterior/Animation</td><td>Import Mesh ✗, Import Animations ✓, Skeleton = the exterior skeleton, Animation Length = Exported Time. Each file becomes one AnimSequence named after its take (= the clip).</td></tr>
+<tr><td><code>UCX_MyLoco_Collision.fbx</code></td><td>View/Models/Collision</td><td>Static Mesh, Combine Meshes ✓, Auto Generate Collision ✗; then in the asset set Collision Complexity = <i>Use Complex Collision As Simple</i>. <span class="pill u">check</span></td></tr>
+<tr><td>Textures</td><td>View/Materials</td><td>Normal maps: Flip Green Channel if baked in Blender. ORM: sRGB ✗.</td></tr>
+</tbody></table>
+<div class="box tip"><span class="t">What to look at after the import</span><p>Open the skeletal mesh. The bone tree should read <code>Root ▸ Body_Pivot ▸ …</code> with <code>axle1..n</code>,
+<code>bogieN</code> and the door/lever bones; if an extra top bone named <code>Armature</code> appears, it is harmless for this workflow. The Skeleton tab lists the sockets:
+<code>Wheel_L1</code>…, <code>DriverSeat</code>, <code>Coupler_F/B</code>, your levers and audio points. Scrub a clip in the animation editor: the door should swing about its hinge. <span class="pill u">check</span></p></div>
+
+<h1>4 · The Animation Blueprints</h1>
+<ol class="steps">
+<li>Right-click the skeleton ▸ Create ▸ <b>Anim Blueprint</b>, parent class <code>RailVehicleAnimInstance</code>, name <code>ABP_MyLoco_Ext</code>.</li>
+<li><b>Class defaults</b> from the build sheet: <code>Axles.Entries</code> = [axle1, axle2, …]; <code>Bogies.Entries</code> = [bogie1, bogie2] (if any); <code>BufferBones</code> = [buffer_fl, …]; <code>VirtualHIDSequenceEntries</code>: one row per door / exterior VHID: Component “CabDoor_L” → Sequence <code>Door_L1</code>, etc.</li>
+<li><b>AnimGraph</b> (Figure 3.3): Mesh Ref Pose → Apply Additive (additive input = Sequence Evaluator <code>Wheels_FullRotation</code>, explicit time bound to a float <code>AxleRotationAlpha</code>) → VehicleAnimGroupEvaluation → Component To Local → Output Pose.</li>
+<li><b>Variable</b> of the simulation parameter reference type (NodeReference + ParameterReference), set to component <code>Simulation</code>, node <code>Axle1</code>, parameter <code>WheelRotation_DEG</code>. Event graph on update: <code>AxleRotationAlpha = value / 360</code>. If the getter is not obvious, bind the variable through the Details panel's property binding as Thomas's ABP does. <span class="pill u">check</span></li>
+<li><code>ABP_MyLoco_Cab</code>: same parent, no wheel evaluator; <code>VirtualHIDSequenceEntries</code> = the lever clips (ThrottleControl → Throttle, ReverserControl → Reverser, BrakeControl → Brake).</li>
+</ol>
+
+<h1>5 · The RVV Blueprint</h1>
+<ol class="steps">
+<li>In <code>View</code>: Blueprint Class ▸ All Classes ▸ <b>RailVehicleView</b> ▸ <code>RVV_MyLoco</code>.</li>
+<li>Add a Skeletal Mesh component named <b><code>SK_RailVehicle</code></b> (Thomas's name; the streamer's wagon called it <code>Body</code> and worked, so the name is a convention rather than a rule <span class="pill c">community</span>): mesh <code>SK_MyLoco_Ext</code>, Animation Mode = Blueprint, class <code>ABP_MyLoco_Ext</code>.</li>
+<li>Add <code>SK_Cab</code> (skeletal mesh, <code>ABP_MyLoco_Cab</code>) once the cab exists.</li>
+<li>Add a Static Mesh component <code>SM_Collision</code> with the UCX mesh: hidden in game, collision enabled.</li>
+<li>Add two Box components <code>Blocker_F</code> / <code>Blocker_B</code> at the ends of the footplate so the player cannot walk off.</li>
+<li>Add a <code>ComponentLODManagementComponent</code>.</li>
+<li>Leave <i>Reference Actor</i> empty for now; the RVM does not exist yet. Save.</li>
+</ol>
+
+<h1>6 · The RVM Blueprint and the physics numbers</h1>
+<ol class="steps">
+<li>In <code>Simulation</code>: Blueprint Class ▸ All Classes ▸ <b>RailVehicle</b> ▸ <code>RVM_MyLoco</code>.</li>
+<li>Class Defaults ▸ TSW Extensions ▸ <b>Reference Actor</b> = <code>RVV_MyLoco</code>. Then open <code>RVV_MyLoco</code> and set <em>its</em> Reference Actor to <code>RVM_MyLoco</code>. (At runtime these are <code>ModelChildActorComponent.view_actor_asset</code> and <code>RVV.ModelActor</code>.) <span class="pill v">verified</span></li>
+<li>Add Component ▸ <b>SimulationComponent</b>, name <code>Simulation</code>. Its SimuGraph asset comes in Part&nbsp;5. Thomas runs it with <code>bEnableParallelism</code> on; the streamer switches parallelism <b>off</b> on custom vehicles, having had problems with it. <span class="pill c">community</span></li>
+<li>Add Component ▸ <b>InteractionEnvironmentComponent</b>, name <code>DriverEnvironment</code>, role DRIVER, side FRONT.</li>
+<li>Add Component ▸ <b>SeatManagerComponent</b>, name <code>SeatManager</code>.</li>
+<li>Add two <b>CouplerComponents</b>: <code>Coupler_F</code> (side FRONT) and <code>Coupler_B</code> (BACK). Set <code>coupler_id</code> (to couple to Dovetail stock read the id off a running vehicle, Part&nbsp;6 §6; Thomas uses <code>ThomasAndFriends_Hook</code>; the streamer's SA3 stock uses its own id, and only matching ids couple), pivot and receiving points from the build sheet (X along, Y up, metres). <b>Pivot point</b> = where the coupler leaves the body (draft gear / coupler root); <b>receiving point</b> = where two couplers meet (the knuckle lock); heights are similar across stock, X is yours to measure. For knuckle or SA3 couplers tick <code>can_auto_couple</code>; buffer springiness off on stock without buffers; slack range about ±0.01 m; make the rear one by duplicating the front and negating X. <span class="pill c">community</span></li>
+<li>Select the inherited <b>RailVehiclePhysicsComponent</b> and type the build sheet's numbers:</li>
+</ol>
+<table>
+<thead><tr><th style="width:56mm">Property</th><th style="width:40mm">Build sheet key</th><th>Boilerplate / Thomas</th></tr></thead>
+<tbody>
+<tr><td><code>Node.Width / Height / Length</code> (m)</td><td><code>physics.Width_m</code>…</td><td>2.4 / 2.9 / 6.0 · Thomas 2.42 / 2.90 / 6.54. Length is measured over the coupler faces, not the body; the build sheet includes the coupling empties for that reason.</td></tr>
+<tr><td><code>Node.Mass</code> (kg)</td><td><code>physics.Mass_kg</code> (fill in)</td><td>40 000 · Thomas 50 000</td></tr>
+<tr><td><code>Node.PhysicsBodyOffset</code>, <code>CentreOfMassOffset</code> (x, z m)</td><td><code>PhysicsBodyOffset_xz_m</code>, <code>CentreOfMassOffset_xz_m</code></td><td>(0, 1.5), (0, 1.2) · Thomas (−0.04, 2.13), (0, 1.5). If the vehicle floats above or sinks into the rails, the body offset Z must be half the height (the streamer's fix). <span class="pill c">community</span></td></tr>
+<tr><td><code>Node.CreepCoefficient</code>, drag front/back/side</td><td></td><td>0.002, 1.0 each</td></tr>
+<tr><td><code>Node.bHasFront/BackBuffers</code>, sizes, offsets, stiffness</td><td><code>buffers_m</code> (negate Y for UE)</td><td>size (0.25, 0.35, 0.35), stiffness 3000</td></tr>
+<tr><td><code>SimplePhysics</code>: bPowered, MaxTractiveEffort, MaximumBrakingEffort, MaxSpeed, curve</td><td>from your TSC sim blueprint</td><td>true, 150 000 N, 120 000 N, 20 m/s, Dovetail's shared curve in <code>/Game/Core/RailVehicles/RVM/</code></td></tr>
+<tr><td><code>StopShortDistance</code>, MaxComfortableAcceleration/Deceleration</td><td></td><td>1.8 m, 0.45 m/s²</td></tr>
+</tbody></table>
+<p>Then do Part&nbsp;5 (the SimuGraph and the three controls) before the seat, because the controls need the environment and the HUD needs the controls.</p>
+
+<h1>7 · Environment, seat and camera</h1>
+<p>On the RVV: <span class="pill v">verified</span> field names</p>
+<ul>
+<li><b>SeatComponent</b> <code>DriverSeat</code>: seat_role ENGINEER, seat_side FRONT, character_seat_socket <code>DriverSeat</code>, initial_camera_component <code>DriverCamera</code>; hit box and entrance box extents around the seat.</li>
+<li><b>InteractionEnvironmentCameraComponent</b> <code>DriverCamera</code>: camera_name “Driver's Seat”, camera_location INTERIOR, interaction_environment_component <code>DriverEnvironment</code>, FOV 90 (min 50), freedom of rotation pitch 135 / yaw 360.</li>
+<li>Two <b>CameraTransitionComponents</b> <code>StepUp_L</code> / <code>StepDown_L</code> at the cab door so the on-foot player can board; <code>camera_transition_max_speed</code> stops boarding a moving train.</li>
+<li>Later: <code>HeadoutLeft/Right</code> cameras (EXTERIOR), a second seat and environment for the second man.</li>
+</ul>
+
+<h1>8 · RVD and formation</h1>
+<ol class="steps">
+<li>In <code>Data/RVD</code>: right-click ▸ Miscellaneous ▸ Data Asset ▸ <b>RailVehicleDefinition</b> ▸ <code>RVD_MyLoco</code>.</li>
+<li>ModelActorAsset = <code>RVM_MyLoco</code>, ViewActorAsset = <code>RVV_MyLoco</code>, VehicleCategory Locomotive, MaximumSpeed (m/s), FriendlyName, bIsDrivable ✓, bIsSelectable ✓, bIsAvailableForFormationEditor ✓.</li>
+<li>Tick <b>bRegenBounds</b>, then ConnectivityData ▸ <b>bRecalculateData</b> so the coupler ids are copied from the RVM.</li>
+<li><b>Region:</b> the game's menus filter by the regions in its own table (<code>CountryTableRow</code>); a custom region string is not filterable, so pick the nearest existing one (the streamer chose Germany for a Ukrainian wagon). For a wagon: category Wagon, PoweredAxleCount 0, service types as wanted, a thumbnail later (Part&nbsp;6 §8). <span class="pill c">community</span></li>
+<li>Next to it: Data Asset ▸ <b>TrainFormation</b> ▸ <code>FRM_MyLoco</code> with one Train Entry pointing at <code>RVD_MyLoco</code>.</li>
+</ol>
+
+<h1>9 · Play In Editor</h1>
+<ol class="steps">
+<li>Open a route you own (LeedsManchesterMap works), press <b>Play</b>, and spawn <code>FRM_MyLoco</code> the same way Dovetail's stock is spawned (free-roam spawn menu or the <code>ts2.rtt</code> console commands the community God Mode tool wraps). <span class="pill u">check</span> The route the streamer used instead: open the map's <b>timetable</b> tool, add a train, choose your formation, <i>Pick Location</i> on a track, rebuild the timetable, then Play ▸ <i>current camera location</i>. Two formations placed touching each other coupled by themselves. <span class="pill c">community</span></li>
+<li>Walk up, click the step, click the seat. The HUD should show your levers. Reverser forward, brake off, throttle up.</li>
+<li>If it does not move: the sim runs without the ABP, so the ABP is not the problem; confirm the RVM graph writes to the exact node names; look at the live SimuGraph values with the Python snippet in Part&nbsp;6 §6.</li>
+<li>If it moves but the wheels do not turn: the ABP binding (node name, parameter name), the Axles list, or the ABP's model actor reference and the per-entry sim node references (Part&nbsp;3 §8).</li>
+<li>If it jumps or twists when hauled: two bogie nodes in the SimuGraph share the same offset (Part&nbsp;5 §2).</li>
+<li>Save everything; a crash in PIE loses unsaved Blueprints.</li>
+</ol>
+
+<h1>10 · Growth path</h1>
+<table>
+<thead><tr><th style="width:36mm">Feature</th><th>What to add</th></tr></thead>
+<tbody>
+<tr><td>Cab interior</td><td><code>SK_Cab</code> + <code>ABP_MyLoco_Cab</code> with VHID entries for each lever clip; move the hitboxes onto the cab's lever sockets.</td></tr>
+<tr><td>Doors</td><td>RVM <code>RailVehicleDoorComponent</code> CabDoor_L/R, RVV hitboxes, door clips in the exterior ABP, door cue in the RVA.</td></tr>
+<tr><td>Lights</td><td>RVM PushButton Headlights + VHID preset; RVV LinearElectricLightComponent + SpotLight; bind the VHID event in the RVV graph. Part&nbsp;6.</td></tr>
+<tr><td>Audio</td><td><code>RVA_MyLoco</code> (parent RailVehicleAudio) in the RVD's AdditionalViewActorAssets; running loop + horn; speed thresholds. Part&nbsp;6.</td></tr>
+<tr><td>Realistic braking</td><td>Replace BrakeInput with DirectBrakeControl + compressor + reservoirs + hoses, plus AirHoseComponents on the RVM. Part&nbsp;5.</td></tr>
+<tr><td>Second cab</td><td>Duplicate environment, seat, camera and every control with <code>_B</code>; set bIsSlaveLinked on the rear levers.</td></tr>
+<tr><td>Safety systems, wipers, sanders, numbering, crew</td><td>One more VHID pair each plus a SimuGraph block or a view component (WiperComponent, NumberingComponent + NumberBinding, CharacterCollection on the RVD).</td></tr>
+</tbody></table>
+
+</body></html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 5 — Simulation and Controls</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 5</div>
+    <h1>Simulation and controls: SimuGraph, VHIDs, and where your Lua goes</h1>
+    <div class="sub">In TSC the sim blueprint and the Lua script gave the locomotive its character. In TSW that work splits into the <b>SimuGraph</b> (a node graph of axles, motors,
+      cylinders and valves integrated every frame), <b>VHID</b> control pairs, and a thin Blueprint event graph that copies control values into the graph. This part builds the
+      minimal drivable set and shows how a TSC script translates.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>The Simulation Asset and its node types</li>
+    <li>The minimal SimuGraph that drives</li>
+    <li>Parameter links and presets</li>
+    <li>VHID: a logic half and a click half</li>
+    <li>The three controls a locomotive needs</li>
+    <li>The RVM event graph: glue, not simulation</li>
+    <li>What happens to your TSC Lua</li>
+    <li>Simple Physics: the fallback</li>
+  </ol></div>
+  <div class="foot">Node types, parameter names and Thomas's graph were read live from <code>SA_Thomas</code> (36 nodes, RK4) and the VHID fields from his components
+  (<span class="pill v">verified</span>). Whether the SimuGraph editor's palette offers every node type to new assets, and the exact Blueprint node titles for reading and
+  writing parameters, were not opened during the inspection (<span class="pill u">check</span>).</div>
+</section>
+
+<h1>1 · The Simulation Asset and its node types</h1>
+<p>Create it with right-click ▸ Miscellaneous ▸ <b>Simulation Asset</b> in <code>Simulation/</code> and assign it to the RVM's Simulation component. Double-clicking opens the
+SimuGraph editor. The asset holds <code>PresetConfigData[]</code> (named configurations with Parked / RunningStopped / RunningActive snapshots) and the runtime graph: a
+<code>Nodes[]</code> array, each with a name, a struct type such as <code>SimulationNode_Axle</code>, and pins connected to other nodes. <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:40mm">Node type</th><th>Does</th><th style="width:48mm">Parameters seen</th></tr></thead>
+<tbody>
+<tr><td><code>Axle</code></td><td>A wheelset. Takes torque from the gearbox and brake force from pads, reports speed. The physics component's <code>ConnectedWheels</code> points here. Settings on the node: X offset from its parent (bogie or body), track <b>gauge</b> (1435 or 1520 mm), <b>wheel radius</b>, axle-to-track gap, suspension. <span class="pill c">community</span></td><td>SpeedAtRail_MS, WheelRotation_DEG, VelocityAtGround_MS</td></tr>
+<tr><td><code>Bogie</code></td><td>A bogie pivot: X offset of the pivot from the vehicle centre; its axles name it as their parent. The ABP's Bogies entry points at it. <span class="pill c">community</span></td><td></td></tr>
+<tr><td><code>ElectricalMotorV2</code></td><td>Voltage/current to torque; polarity input for direction.</td><td>ReverseFieldPolarity</td></tr>
+<tr><td><code>ChopperV2</code></td><td>Power controller between a voltage source and the motor; its position is the throttle.</td><td>CurrentPosition</td></tr>
+<tr><td><code>VoltageSource</code>, <code>Gearbox</code></td><td>Ideal supply; ratio motor→axle.</td><td></td></tr>
+<tr><td><code>BrakeRigging</code>, <code>BrakePad</code>, <code>BrakeCylinder</code></td><td>Cylinder force → rigging → friction on one axle.</td><td></td></tr>
+<tr><td><code>DirectBrakeControl</code></td><td>Driver's brake valve model.</td><td>BrakeInputSignal, BrakeHoldActive</td></tr>
+<tr><td><code>AirCompressor, AirReservoir, AirPipe, AirValve, AirHose, AirExhaust, AirOneWayValve, LimitingValve</code></td><td>The pneumatic toolkit. Hoses connect to the next vehicle's graph when coupled.</td><td></td></tr>
+<tr><td><code>ValueConverter</code></td><td>A plain input slot: Blueprints write <code>InputValue</code>; it exposes <code>OutValue0..n</code>, optionally remapped. <b>This is how controls enter the graph.</b></td><td>InputValue, OutValue0, OutValue1</td></tr>
+<tr><td><code>ValueTransition</code>, <code>Expression</code>, <code>RateOfChange</code></td><td>Smooth toward a target; free-form maths; derivative (HUD accelerometer).</td><td>TargetPosition, Result, InputValue</td></tr>
+</tbody></table>
+<p>Dovetail's other locomotives show many more (diesel engine, traction motor sets, generators, exhausters, EP brake controllers, TPWS/AWS blocks); the ones above are the
+ones guaranteed to exist in your editor build because Thomas uses them.</p>
+
+<h1>2 · The minimal SimuGraph that drives</h1>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.8">
+  <defs><marker id="s5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker>
+  <marker id="s5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f6fb2"/></marker></defs>
+  <text x="10" y="18" font-weight="bold" fill="#177a6e">TRACTION</text>
+  <rect x="10" y="26" width="110" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/><text x="65" y="42" text-anchor="middle" font-weight="bold">PowerInput</text><text x="65" y="56" text-anchor="middle">ValueConverter</text>
+  <rect x="150" y="26" width="110" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="205" y="42" text-anchor="middle" font-weight="bold">Motor</text><text x="205" y="56" text-anchor="middle">ElectricalMotorV2</text>
+  <rect x="290" y="26" width="100" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="340" y="42" text-anchor="middle" font-weight="bold">Gearbox</text><text x="340" y="56" text-anchor="middle">Gearbox</text>
+  <rect x="420" y="26" width="90" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="465" y="42" text-anchor="middle" font-weight="bold">Axle1</text><text x="465" y="56" text-anchor="middle">Axle</text>
+  <rect x="540" y="26" width="90" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="585" y="42" text-anchor="middle" font-weight="bold">Axle2</text><text x="585" y="56" text-anchor="middle">Axle</text>
+  <rect x="150" y="84" width="110" height="36" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="205" y="99" text-anchor="middle" font-weight="bold">VoltageSource</text><text x="205" y="112" text-anchor="middle">VoltageSource</text>
+  <rect x="10" y="84" width="110" height="36" rx="5" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/><text x="65" y="99" text-anchor="middle" font-weight="bold">ReverserPosition</text><text x="65" y="112" text-anchor="middle">ValueConverter</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#s5)"><path d="M120,46 L148,46"/><path d="M260,46 L288,46"/><path d="M390,46 L418,46"/><path d="M510,46 L538,46"/><path d="M205,84 L205,68"/></g>
+  <path d="M120,102 C140,102 150,80 160,66" stroke="#1f6fb2" stroke-width="1.3" stroke-dasharray="4 3" fill="none" marker-end="url(#s5b)"/>
+  <text x="130" y="134" fill="#1f6fb2">OutValue0 → Motor.ReverseFieldPolarity (parameter link, not a pin)</text>
+  <text x="10" y="166" font-weight="bold" fill="#a86400">BRAKING</text>
+  <rect x="10" y="174" width="110" height="40" rx="5" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/><text x="65" y="190" text-anchor="middle" font-weight="bold">BrakeInput</text><text x="65" y="204" text-anchor="middle">ValueConverter</text>
+  <rect x="150" y="174" width="110" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="205" y="190" text-anchor="middle" font-weight="bold">BrakeCylinder</text><text x="205" y="204" text-anchor="middle">BrakeCylinder</text>
+  <rect x="290" y="174" width="100" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="340" y="190" text-anchor="middle" font-weight="bold">BrakeRigging</text><text x="340" y="204" text-anchor="middle">BrakeRigging</text>
+  <rect x="420" y="174" width="90" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="465" y="190" text-anchor="middle" font-weight="bold">BrakePad_1</text><text x="465" y="204" text-anchor="middle">BrakePad</text>
+  <rect x="540" y="174" width="90" height="40" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="585" y="190" text-anchor="middle" font-weight="bold">BrakePad_2</text><text x="585" y="204" text-anchor="middle">BrakePad</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#s5)"><path d="M120,194 L148,194"/><path d="M260,194 L288,194"/><path d="M390,194 L418,194"/><path d="M390,188 C420,160 500,160 538,186"/><path d="M465,174 L465,68"/><path d="M585,174 L585,68"/></g>
+  <rect x="150" y="232" width="110" height="36" rx="5" fill="#fff" stroke="#8a96a6" stroke-dasharray="3 2"/><text x="205" y="247" text-anchor="middle">Brake Reservoir</text><text x="205" y="260" text-anchor="middle">AirReservoir (fixed p)</text>
+  <text x="270" y="252" fill="#5b6676">← only if BrakeCylinder insists on an air input</text>
+  <text x="10" y="290" fill="#5b6676">Blue = written by the RVM Blueprint from the three VHIDs. Names copied from SA_Thomas so they exist in this build. Add air, reservoirs and safety systems later.</text>
+</svg>
+<figcaption><b>Figure 5.1 · Throttle, reverser, brake, two axles: still drivable.</b> Thomas's real graph has 36 nodes (a chopper, a power ramp, a direct brake valve with apply/release
+valves, a compressor, main reservoir, pipes and hoses to the next vehicle); this is its skeleton.</figcaption>
+</figure>
+<ol class="steps">
+<li><code>Axle1</code>, <code>Axle2</code>: set wheel radius (build sheet <code>axles[].radius_m</code>) and mass per axle; chain their axle pins. The physics component's <code>ConnectedWheels</code> is filled at runtime from these.</li>
+<li><code>VoltageSource → Motor → Gearbox → Axle1</code>.</li>
+<li><code>PowerInput</code>: map InputValue 0..1 to the motor's control pin (on Thomas this goes through a Chopper; try the motor's power input first, insert a <code>ChopperV2</code> if the node refuses).</li>
+<li><code>ReverserPosition.OutValue0 → Motor.ReverseFieldPolarity</code> via the parameter-link table (§3).</li>
+<li><code>BrakeInput → BrakeCylinder → BrakeRigging → BrakePad_1/2 → Axle1/2</code>.</li>
+<li>Save; record a Default configuration's <b>RunningStopped</b> preset with brake applied and throttle at zero.</li>
+</ol>
+<div class="box"><span class="t">Steam, diesel, electric</span><p>Thomas is labelled “Steam” for the player but is simulated as an electric motor and a chopper: the graph only has to <em>feel</em>
+right. Start every loco this way; swap in the diesel-engine or boiler blocks from the node palette when the rest works. <span class="pill v">verified</span></p></div>
+<div class="box tip"><span class="t">A hauled wagon's graph is smaller still</span><p>The streamer's hopper rolled behind a locomotive with only six nodes: two <code>Bogie</code> nodes with their pivot
+offsets (the first at X = −5.16 m, the second positive) and four <code>Axle</code> nodes, each with gauge 1520 mm, the wheel radius, an offset of about ±0.95 m from its bogie, and the bogie
+named as parent. No motor, no brakes: a wagon has nothing to push and the loco does the braking for now. When one bogie node was accidentally given the other's offset the wagon jumped
+and twisted as soon as it was hauled; fixing the sign fixed it. The real air-brake distributor is the part he had not solved yet. <span class="pill c">community</span></p></div>
+
+<h1>3 · Parameter links and presets</h1>
+<p>Besides pin connections, the runtime stores <b>output-to-input parameter links</b>. Thomas's: <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:52mm">Output (node.param)</th><th style="width:60mm">→ Input (node.param)</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>ReverserPosition.OutValue0</td><td>ElectricalMotorV2.ReverseFieldPolarity</td><td>Reverser flips the motor.</td></tr>
+<tr><td>ReverserPosition.OutValue1</td><td>DirectBrakeControl.BrakeHoldActive</td><td>Reverser in neutral holds the brake.</td></tr>
+<tr><td>Power Ramp.Result</td><td>TractionBrakingSmoothing.TargetPosition</td><td>Shaped throttle becomes the target.</td></tr>
+<tr><td>TractionBrakingSmoothing.OutValue0 / 1</td><td>ChopperV2.CurrentPosition / DirectBrakeControl.BrakeInputSignal</td><td>Positive half = power, negative half = brake (one-lever simple controls).</td></tr>
+<tr><td>Axle3.VelocityAtGround_MS</td><td>HUD_Accelerometer.InputValue</td><td>HUD only.</td></tr>
+</tbody></table>
+<p><b>Presets.</b> Each configuration stores three states: Parked (cold and dark), RunningStopped (ready, brakes on), RunningActive (moving). The game applies one at spawn
+(<code>LastAppliedPreset = RunningStoppedPreset</code>). Thomas's were all unrecorded, so defaults were used. Record yours by setting the graph into each state in the editor and
+saving; it is what lets a scenario spawn your engine already running.</p>
+
+<h1>4 · VHID: a logic half and a click half</h1>
+<figure>
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.8">
+  <rect x="10" y="10" width="340" height="190" rx="7" fill="#e6f4ea" stroke="#1e6b35" stroke-width="1.5"/>
+  <text x="180" y="30" text-anchor="middle" font-weight="bold" fill="#1e6b35">RVV · VirtualHIDInteractionComponent "Throttle_F"</text>
+  <text x="20" y="50">attach: socket <tspan font-family="DejaVu Sans Mono">Lever_Throttle</tspan> on SK_Cab (rides the lever)</text>
+  <text x="20" y="66">BoxShape Cube, BoxExtent (13, 15, 23) cm</text>
+  <text x="20" y="82">InteractionMode DragAlongInteractionDirection</text>
+  <text x="20" y="98">InteractionDirection: which way a mouse drag increases it</text>
+  <text x="20" y="114">MaxInteractionDistance 2.5 m · bShowAutoTooltip</text>
+  <text x="20" y="130">HighlightedComponentsRef: mesh to outline on hover</text>
+  <text x="20" y="146">interaction sound, haptic type</text>
+  <rect x="20" y="158" width="320" height="30" rx="4" fill="#fff" stroke="#1e6b35"/>
+  <text x="180" y="177" text-anchor="middle" font-weight="bold">InteractionModelComponent = "ThrottleControl"  ← the link</text>
+  <text x="360" y="110" text-anchor="middle" font-size="14" fill="#5b6676">⇄</text>
+  <text x="360" y="126" text-anchor="middle" font-size="7.5" fill="#5b6676">by NAME</text>
+  <rect x="370" y="10" width="340" height="190" rx="7" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+  <text x="540" y="30" text-anchor="middle" font-weight="bold" fill="#1f6fb2">RVM · IrregularLeverComponent "ThrottleControl"</text>
+  <text x="380" y="50">DisplayName "Throttle" · DisplayInfo (HUD text, named ranges)</text>
+  <text x="380" y="66">InputIdentifier "SimpleThrottle" (keyboard / controller)</text>
+  <text x="380" y="82">InteractionEnvironmentComponent "DriverEnvironment"</text>
+  <text x="380" y="98">DefaultInputValue 0.5 · ValueMap (−1,−1) (0,0) (1,1)</text>
+  <text x="380" y="114">Notches [{0,0}] · NotchSnapSensitivity 5</text>
+  <text x="380" y="130">DigitalSensitivity 0.5 · AnalogueSensitivity 0.1</text>
+  <text x="380" y="146">CurrentInputValue / CurrentOutputValue (SaveGame)</text>
+  <rect x="380" y="158" width="320" height="30" rx="4" fill="#fff" stroke="#1f6fb2"/>
+  <text x="540" y="177" text-anchor="middle" font-weight="bold">events: OnOutputValueChanged → sim, view, audio</text>
+</svg>
+<figcaption><b>Figure 5.2 · Every control is this pair.</b> The view half is always a VirtualHIDInteractionComponent; the model class changes: IrregularLever for levers,
+PushButton for buttons (also used for handbrake wheels and door locks), RailVehicleDoor for doors, Coupler / AirHose / JumperCable for connections, Numbering for the running number. <span class="pill v">verified</span></figcaption>
+</figure>
+<table>
+<thead><tr><th style="width:52mm">Model-side property (all VHIDs)</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>InputIdentifier.Identifier</code></td><td>Keyboard binding: <code>SimpleThrottle</code>, <code>Throttle</code>, <code>Reverser</code>, <code>TrainBrake</code>, <code>LocoBrake</code>, <code>Horn</code>, <code>Headlights</code>, <code>Wipers</code>, <code>Sander</code>, <code>Bell</code>. Empty for click-only controls.</td></tr>
+<tr><td><code>DisplayInfo</code></td><td>How the HUD prints it: mode, value source, formatting, named ranges (−1.5..−0.5 “Brake/Reverse”, 0.5..1.5 “Throttle/Forward”).</td></tr>
+<tr><td><code>bIsSlaveLinked, SlaveVHIDComponent</code></td><td>Rear-cab lever follows the front one.</td></tr>
+<tr><td><code>ValueMap[]</code>, <code>Notches[]</code> (levers)</td><td>Input→output points; detents (a <i>blocker</i> needs a second action to pass).</td></tr>
+<tr><td><code>PushMode</code> (buttons)</td><td>PUSH_AND_HOLD (horn) or TOGGLE (headlights); pressed / released output values.</td></tr>
+<tr><td>Door fields</td><td>type STAFF/PASSENGER, side, lock state, target state, transition time, delays.</td></tr>
+</tbody></table>
+<p><b>VHID presets</b> on the physics component bundle target values (<code>HeadlightsOn</code>: Headlights → 1). The game applies them from the pause menu and during service
+setup; real locomotives use them for “Cold start”, “Ready to drive”, “Shutdown”.</p>
+
+<h1>5 · The three controls a locomotive needs</h1>
+<table>
+<thead><tr><th style="width:34mm">RVM component</th><th style="width:36mm">Class</th><th>Settings</th></tr></thead>
+<tbody>
+<tr><td><code>ThrottleControl</code></td><td>IrregularLeverComponent</td><td>DisplayName “Throttle”; InputIdentifier <code>Throttle</code> (or <code>SimpleThrottle</code> with bUsesSimpleControls on the RVD for Thomas's one-lever scheme); environment DriverEnvironment; ValueMap (0,0),(1,1); DefaultInputValue 0; one notch at 0.</td></tr>
+<tr><td><code>ReverserControl</code></td><td>IrregularLeverComponent</td><td>“Reverser”; <code>Reverser</code>; ValueMap (−1,−1),(0,0),(1,1); notches at −1, 0, 1; DefaultInputValue 0.5; named values Reverse / Neutral / Forward.</td></tr>
+<tr><td><code>BrakeControl</code></td><td>IrregularLeverComponent</td><td>“Brake”; <code>TrainBrake</code>; ValueMap (0,0),(1,1); DefaultInputValue 1 (brakes on at spawn).</td></tr>
+<tr><td><code>Horn</code></td><td>PushButtonComponent</td><td><code>Horn</code>; PUSH_AND_HOLD. Audio only.</td></tr>
+</tbody></table>
+<p>On the RVV: one VirtualHIDInteractionComponent per control attached to <code>SK_RailVehicle</code> (later <code>SK_Cab</code>) at the matching socket, InteractionModelComponent = the RVM
+component name, Cube hitbox about 10×10×20 cm, DragAlongInteractionDirection, direction +X for forward-is-more. Until the cab exists these are invisible boxes in space; that is fine for testing.</p>
+
+<h1>6 · The RVM event graph: glue, not simulation</h1>
+<p>For each lever, bind <code>OnOutputValueChanged</code> and call the set-simulation-parameter node with a struct variable: <code>Simulation / PowerInput / InputValue</code>, likewise
+<code>ReverserPosition</code> and <code>BrakeInput</code>. Three bindings, three calls, nothing else. Thomas's graph additionally reads <code>Axle3 / SpeedAtRail_MS</code> through a threshold
+delegate (told when speed crosses 0.2 m/s instead of polling), raises <code>OnVehicleSpeedChanged</code> for the view's wheel-blur, and binds the physics component's coupling, door-lock,
+headlight and preset events. <span class="pill v">verified</span></p>
+<div class="box rule"><span class="t">Rule of thumb</span><p>If you find yourself computing physics in Blueprint, that logic belongs in the SimuGraph. The graph copies VHID outputs into
+SimuGraph inputs, reads a few outputs, and raises events.</p></div>
+
+<h1>7 · What happens to your TSC Lua</h1>
+<table>
+<thead><tr><th style="width:56mm">TSC Lua</th><th style="width:60mm">TSW</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>Call("*:GetControlValue", "Regulator", 0)</code></td><td>Get the VHID's <code>CurrentOutputValue</code>, or bind <code>OnOutputValueChanged</code></td><td>Event-driven instead of polled.</td></tr>
+<tr><td><code>Call("*:SetControlValue", "X", 0, v)</code></td><td>Set the VHID's input value (lever node) or apply a VHID preset</td><td>Presets replace most scripted “set several controls” sequences.</td></tr>
+<tr><td><code>OnControlValueChange(name, index, value)</code></td><td>One <code>OnOutputValueChanged</code> binding per component</td><td>No string dispatch.</td></tr>
+<tr><td><code>Update(dt)</code> per-frame logic</td><td>Simulation component's <code>OnPreSimulate</code> delegate, or Tick</td><td>Keep it tiny; prefer SimuGraph nodes.</td></tr>
+<tr><td>Physics maths (thermal fade, journal friction, adhesion)</td><td><code>Expression</code>, <code>RateOfChange</code>, <code>ValueTransition</code> nodes and parameter links</td><td>Integrated at RK4 with the rest of the graph; readable by the ABP, RVA and HUD by name.</td></tr>
+<tr><td>Speed-dependent state (dewirement above v, chirp above load)</td><td><code>RailVehicleParameterChangedDelegate</code> with a threshold</td><td>Fires when a value crosses a target; no polling.</td></tr>
+<tr><td>Animation via a control value</td><td>A clip in <code>VirtualHIDSequenceEntries</code> scrubbed by the VHID</td><td>Part&nbsp;3.</td></tr>
+<tr><td>Sounds via control values</td><td>RVA binds the same VHID events</td><td>Part&nbsp;6.</td></tr>
+<tr><td><code>SysCall("ScenarioManager:ShowMessage")</code></td><td>HUD message / gameplay task system</td><td>Different API; keep it for later.</td></tr>
+<tr><td>Lead-unit / consist messaging (<code>SendConsistMessage</code>)</td><td>Hoses and jumper cables: SimuGraph hoses connect graphs across couplers; <code>ReceiveMessage</code> on the physics component</td><td>The air system crosses vehicles through hose nodes, not messages.</td></tr>
+</tbody></table>
+<h3>Worked example: the trolley poles</h3>
+<p>The TSC script (<code>examples/lua/TrolleyPole.lua</code>) keeps two poles with states raised / lowered / dewired, raises and lowers them on a control, dewires above a speed and
+cuts traction while dewired. In TSW:</p>
+<ol class="steps">
+<li><b>Controls:</b> two PushButton VHIDs <code>PoleFront</code>, <code>PoleRear</code> (TOGGLE) on the RVM, hitboxes on the roof hatch or the cab switch on the RVV.</li>
+<li><b>Animation:</b> two clips <code>Pole_F</code>, <code>Pole_R</code> (lowered at frame 0, raised at the end) in <code>VirtualHIDSequenceEntries</code>: the pole follows the button's 0..1 output over the button's travel time. Export them from the same keyed objects you made for TSC.</li>
+<li><b>Dewirement:</b> a <code>RailVehicleParameterChangedDelegate</code> on <code>Axle1.SpeedAtRail_MS</code> at the dewire speed; in the handler set the button's input back to 0 (pole drops) and set a <code>ValueConverter</code> node <code>PoleContact</code> to 0.</li>
+<li><b>Traction cut:</b> a parameter link <code>PoleContact.OutValue0 → VoltageSource</code> (or an <code>Expression</code> gating <code>PowerInput</code>): no contact, no volts. That part of the Lua is now four nodes.</li>
+<li><b>Sounds and sparks:</b> the RVA binds the pole VHIDs for the clunk; the RVV binds them for a Niagara spark at a <code>socket_PoleHead</code> socket.</li>
+</ol>
+
+<h1>8 · Simple Physics: the fallback</h1>
+<p>The physics component carries a complete <code>SimplePhysics</code> block (powered flag, max effort, effort-vs-speed curve, max speed, braking effort). It is filled on Thomas even
+though he has a full graph, and the wiki's setup guide says to fill it for powered vehicles. It is almost certainly what AI-driven and vault-stored vehicles use. Whether a vehicle with
+no SimuGraph at all is drivable has not been tested; the minimal graph above is cheap, so build it rather than relying on the fallback. Fill the block from your TSC sim blueprint's
+tractive-effort numbers. <span class="pill u">check</span></p>
+
+</body></html>

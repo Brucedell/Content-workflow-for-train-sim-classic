@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 7 — The Branch Tooling</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 7</div>
+    <h1>The branch tooling: objects to bones, the build sheet, the editor helper</h1>
+    <div class="sub">Reference for the three things this branch ships: a Blender add-on that converts the TSC object hierarchy into a skinned skeletal mesh with value-scrubbed clips and
+      sockets, the build sheet it writes for the numbers you type in the editor, and a Python script for the editor's own console that does the importing and the data assets. How each
+      was tested, how to extend them, and what to script next.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Where the tool sits</li>
+    <li>Installing and using the add-on</li>
+    <li>What it reads: the tags</li>
+    <li>What it does, step by step</li>
+    <li>What it writes: the FBX set and the build sheet</li>
+    <li>The editor helper</li>
+    <li>How it was tested</li>
+    <li>Extending the tools</li>
+    <li>Further scripts worth writing</li>
+    <li>Known limits</li>
+  </ol></div>
+  <div class="foot">Files: <code>tools/blender/tsw_export_prep.py</code>, <code>tools/tsw/tsw_editor_setup.py</code>, <code>tools/tsw/build_test.py</code>. The add-on was run headless in Blender 4.2's
+  Python module on a synthetic locomotive and its output re-imported into Blender (<span class="pill v">tested</span>). The editor helper was written against the UE 4.26 Python API and the
+  field names read from the running editor but has not been executed inside it (<span class="pill u">check</span>).</div>
+</section>
+
+<h1>1 · Where the tool sits</h1>
+<figure>
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="t7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="70" width="160" height="70" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="90" y="92" text-anchor="middle" font-weight="bold">Master .blend</text>
+  <text x="90" y="108" text-anchor="middle" font-size="8.5">TSC names · actions · empties</text>
+  <text x="90" y="124" text-anchor="middle" font-size="8.5" fill="#5b6676">sidebar tab “TSC”, four panels</text>
+  <g stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#t7)"><path d="M170,85 C210,30 230,22 268,22"/><path d="M170,98 C210,70 230,70 268,70"/><path d="M170,112 C210,140 230,140 268,140"/><path d="M170,125 C210,195 230,195 268,195"/></g>
+  <rect x="270" y="6" width="190" height="32" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="365" y="26" text-anchor="middle" font-size="8.5">tsc_toolkit.py → .igs / .ia / blueprints</text>
+  <rect x="270" y="54" width="190" height="32" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="365" y="74" text-anchor="middle" font-size="8.5">tf3_export_prep.py → FBX per LOD</text>
+  <rect x="270" y="124" width="190" height="32" rx="5" fill="#fbeaee" stroke="#b0304a" stroke-width="1.8"/><text x="365" y="144" text-anchor="middle" font-size="8.5" font-weight="bold">tsw_export_prep.py → rigged FBX set</text>
+  <rect x="270" y="180" width="190" height="32" rx="5" fill="#e5f4f1" stroke="#177a6e"/><text x="365" y="200" text-anchor="middle" font-size="8.5">web_export_prep.py → .glb + manifest</text>
+  <rect x="500" y="100" width="210" height="80" rx="6" fill="#fff" stroke="#b0304a"/>
+  <text x="510" y="118" font-weight="bold" font-size="8.8">MyLoco/ (export folder)</text>
+  <text x="510" y="133" font-family="DejaVu Sans Mono" font-size="8">SK_MyLoco_Ext.fbx  SK_MyLoco_Cab.fbx</text>
+  <text x="510" y="146" font-family="DejaVu Sans Mono" font-size="8">Animation/&lt;Clip&gt;.fbx  (one per clip)</text>
+  <text x="510" y="159" font-family="DejaVu Sans Mono" font-size="8">UCX_MyLoco_Collision.fbx</text>
+  <text x="510" y="172" font-family="DejaVu Sans Mono" font-size="8">MyLoco.tsw_build.json → editor helper</text>
+  <path d="M460,140 L498,140" stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#t7)"/>
+</svg>
+<figcaption><b>Figure 7.1 · Four panels, one tab, one master.</b> The TSW panel is the only one that builds a rig; it does so on a temporary copy and deletes it after the export.</figcaption>
+</figure>
+
+<h1>2 · Installing and using the add-on</h1>
+<ol class="steps">
+<li>Blender ▸ Edit ▸ Preferences ▸ Add-ons ▸ <b>Install…</b> ▸ <code>tools/blender/tsw_export_prep.py</code> ▸ tick it.</li>
+<li>In the 3D viewport press <kbd>N</kbd> ▸ <b>TSC</b> tab ▸ panel <b>TSW branch</b>.</li>
+<li><b>Export root</b> (receives <code>&lt;Name&gt;/</code>), <b>Name</b> (<code>MyLoco</code> → <code>SK_MyLoco_Ext</code>), <b>Cab collection</b> (objects that become <code>SK_MyLoco_Cab</code>), wheel clip frames (60), bone length (cosmetic).</li>
+<li><b>Preview rig in scene</b>: builds the armature, the joined meshes, the sockets and the clip actions in a collection <code>_tsw_export</code>. Select the armature, open the Action editor, scrub a clip; check bones sit on hinges and sockets are where you expect. Delete the collection when done (or just export: the export rebuilds it).</li>
+<li><b>Export TSW FBX set + build sheet</b>. The report is in the Text Editor as <code>TSW_Export</code>: bones, sockets, clips, files.</li>
+</ol>
+
+<h1>3 · What it reads: the tags</h1>
+<table>
+<thead><tr><th style="width:30mm">Property</th><th style="width:22mm">On</th><th style="width:40mm">Value</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>tsw_bone</code></td><td>Object</td><td>bone name</td><td>Force a bone for this object (even if static) and/or name it.</td></tr>
+<tr><td><code>tsw_clip</code></td><td>Object</td><td>clip name</td><td>Name of the clip this object's animation goes into. Default: the NLA strip name, else <code>web_anim</code>, else the action name. Several objects with the same clip name bake into one clip.</td></tr>
+<tr><td><code>tsw_vhid</code></td><td>Object</td><td>RVM component name</td><td>Recorded in the build sheet as “this VHID drives this clip” for the ABP's <code>VirtualHIDSequenceEntries</code>.</td></tr>
+<tr><td><code>tsw_socket</code></td><td>Empty</td><td>socket name</td><td>Exported as <code>SOCKET_&lt;name&gt;</code> under the nearest bone ancestor. Empties named <code>socket_&lt;name&gt;</code> work without the property.</td></tr>
+<tr><td><code>tsw_collision</code></td><td>Mesh</td><td>1</td><td>Joined into <code>UCX_&lt;Name&gt;_Collision</code> and exported as a static mesh instead of being skinned.</td></tr>
+<tr><td><code>tsw_cab</code></td><td>Object</td><td>1</td><td>Goes into the cab mesh (same as being in the cab collection).</td></tr>
+<tr><td><code>tsw_skip</code></td><td>Object</td><td>1</td><td>Left out.</td></tr>
+</tbody></table>
+<p><b>Recognised without tags:</b> wheel objects <code>…boNNwhNN</code> → <code>axleN</code>; bogie objects <code>…boNN</code> → <code>bogieN</code>; names containing “buffer” → <code>buffer_fl/fr/bl/br</code>;
+<code>tsc_driver</code> → <code>SOCKET_DriverSeat</code>; <code>tsc_coupling_front/rear</code> → <code>SOCKET_Coupler_F/B</code> + coupler numbers; any object with keys or strips → a bone. Dropped: LOD&nbsp;2+,
+<code>shadow_</code>, <code>primarydigits</code>, <code>light_fwd/rev</code>. Keep the lower-case <code>axleN</code> / <code>bogieN</code> names: Thomas uses them and the editor's ABP auto-detects them (Part&nbsp;2 §2).</p>
+
+<h1>4 · What it does, step by step</h1>
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.5">
+  <defs><marker id="f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="10" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="90" y="28" text-anchor="middle" font-weight="bold">1 · classify</text><text x="90" y="44" text-anchor="middle">wheel / bogie / buffer / moving / static / empty</text>
+  <rect x="200" y="10" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="28" text-anchor="middle" font-weight="bold">2 · name bones</text><text x="280" y="44" text-anchor="middle">axleN by X, bogieN, buffers, base names</text>
+  <rect x="390" y="10" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="470" y="28" text-anchor="middle" font-weight="bold">3 · parent bones</text><text x="470" y="44" text-anchor="middle">nearest bone ancestor, else Body_Pivot</text>
+  <rect x="580" y="10" width="130" height="46" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="645" y="28" text-anchor="middle" font-weight="bold">4 · armature</text><text x="645" y="44" text-anchor="middle">Root › Body_Pivot › …</text>
+  <rect x="580" y="80" width="130" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="645" y="98" text-anchor="middle" font-weight="bold">5 · copies</text><text x="645" y="114" text-anchor="middle">evaluated meshes, rotated +X</text>
+  <rect x="390" y="80" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="470" y="98" text-anchor="middle" font-weight="bold">6 · weights + join</text><text x="470" y="114" text-anchor="middle">one group per bone, 1.0; Ext and Cab</text>
+  <rect x="200" y="80" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="98" text-anchor="middle" font-weight="bold">7 · collision</text><text x="280" y="114" text-anchor="middle">tagged meshes joined, else body box</text>
+  <rect x="10" y="80" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="90" y="98" text-anchor="middle" font-weight="bold">8 · sockets</text><text x="90" y="114" text-anchor="middle">wheels, driver, couplers, named empties</text>
+  <rect x="10" y="150" width="160" height="46" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="90" y="168" text-anchor="middle" font-weight="bold">9 · bake clips</text><text x="90" y="184" text-anchor="middle">object motion → pose keys, per frame</text>
+  <rect x="200" y="150" width="160" height="46" rx="5" fill="#fff" stroke="#8a96a6"/><text x="280" y="168" text-anchor="middle" font-weight="bold">10 · wheel clip</text><text x="280" y="184" text-anchor="middle">baked if present, else generated</text>
+  <rect x="390" y="150" width="160" height="46" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="470" y="168" text-anchor="middle" font-weight="bold">11 · export</text><text x="470" y="184" text-anchor="middle">mesh FBX ×2, clip FBX ×n, UCX FBX</text>
+  <rect x="580" y="150" width="130" height="46" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="645" y="168" text-anchor="middle" font-weight="bold">12 · build sheet</text><text x="645" y="184" text-anchor="middle">JSON, then remove the rig</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#f7)"><path d="M170,33 L198,33"/><path d="M360,33 L388,33"/><path d="M550,33 L578,33"/><path d="M645,56 L645,78"/><path d="M580,103 L552,103"/><path d="M390,103 L362,103"/><path d="M200,103 L172,103"/><path d="M90,126 L90,148"/><path d="M170,173 L198,173"/><path d="M360,173 L388,173"/><path d="M550,173 L578,173"/></g>
+  <text x="10" y="232" fill="#5b6676">The master is never written to. The rig lives in a collection “_tsw_export” that the export deletes; the preview operator leaves it for you to inspect.</text>
+</svg>
+<figcaption><b>Figure 7.2 · The operator as a flow.</b> Step 9 is the heart: for every frame it computes the object's motion since frame 0 through any moving parent and writes it as the
+bone's pose, so the skinned mesh reproduces the object animation exactly.</figcaption>
+</figure>
+<p>The FBX call for the mesh files, if you want to match it by hand:</p>
+<pre>bpy.ops.export_scene.fbx(filepath=path, use_selection=<span class="k">True</span>, object_types={<span class="s">"ARMATURE"</span>, <span class="s">"MESH"</span>, <span class="s">"EMPTY"</span>},
+    apply_unit_scale=<span class="k">True</span>, apply_scale_options=<span class="s">"FBX_SCALE_ALL"</span>, axis_forward=<span class="s">"-Z"</span>, axis_up=<span class="s">"Y"</span>,
+    use_mesh_modifiers=<span class="k">True</span>, mesh_smooth_type=<span class="s">"FACE"</span>, add_leaf_bones=<span class="k">False</span>, use_armature_deform_only=<span class="k">False</span>,
+    primary_bone_axis=<span class="s">"Y"</span>, secondary_bone_axis=<span class="s">"X"</span>, bake_anim=<span class="k">False</span>, path_mode=<span class="s">"COPY"</span>)
+<span class="c"># clips: object_types={"ARMATURE"}, bake_anim=True, scene range = clip range, scene renamed to the clip (names the take)</span></pre>
+
+<h1>5 · What it writes: the FBX set and the build sheet</h1>
+<table>
+<thead><tr><th style="width:52mm">File</th><th>Content</th></tr></thead>
+<tbody>
+<tr><td><code>SK_&lt;Name&gt;_Ext.fbx</code></td><td>Armature + exterior mesh + all sockets. No animation.</td></tr>
+<tr><td><code>SK_&lt;Name&gt;_Cab.fbx</code></td><td>Same armature + cab mesh (only if a cab collection / <code>tsw_cab</code> objects exist). Import onto the exterior's skeleton.</td></tr>
+<tr><td><code>Animation/&lt;Clip&gt;.fbx</code></td><td>Armature only, one take named after the clip, frames 0..last. Includes <code>Wheels_FullRotation</code>.</td></tr>
+<tr><td><code>UCX_&lt;Name&gt;_Collision.fbx</code></td><td>Static mesh for walkable collision.</td></tr>
+<tr><td><code>&lt;Name&gt;.tsw_build.json</code></td><td>Below.</td></tr>
+</tbody></table>
+<pre>{
+  <span class="s">"name"</span>: <span class="s">"DemoLoco"</span>,
+  <span class="s">"units"</span>: <span class="s">"metres, Blender axes after rotation: X forward, Y left, Z up. UE: multiply by 100 for cm, negate Y."</span>,
+  <span class="s">"physics"</span>: { <span class="s">"Width_m"</span>: 3.0, <span class="s">"Height_m"</span>: 4.16, <span class="s">"Length_m"</span>: 18.5,
+               <span class="s">"PhysicsBodyOffset_xz_m"</span>: [0.0, 2.08], <span class="s">"CentreOfMassOffset_xz_m"</span>: [0.0, 1.66],
+               <span class="s">"ApproximateBounds_cm"</span>: [1850, 300, 416], <span class="s">"Mass_kg"</span>: <span class="k">null</span> },        <span class="c">// mass: from the TSC blueprint</span>
+  <span class="s">"axles"</span>:  [ { <span class="s">"bone"</span>: <span class="s">"axle1"</span>, <span class="s">"x_m"</span>: 7.4, <span class="s">"radius_m"</span>: 0.525, <span class="s">"carrier"</span>: <span class="s">"bogie1"</span>, <span class="s">"tsc_object"</span>: <span class="s">"1_0500_bo01wh01"</span> }, … ],
+  <span class="s">"bogies"</span>: [ { <span class="s">"bone"</span>: <span class="s">"bogie1"</span>, <span class="s">"x_m"</span>: 5.5 }, { <span class="s">"bone"</span>: <span class="s">"bogie2"</span>, <span class="s">"x_m"</span>: -5.5 } ],   <span class="c">// SimuGraph Bogie node offsets</span>
+  <span class="s">"buffers_m"</span>: { <span class="s">"buffer_fl"</span>: [9.0, 0.9, 1.0], … },
+  <span class="s">"couplers"</span>: [ { <span class="s">"side"</span>: <span class="s">"FRONT"</span>, <span class="s">"pivot_point_m"</span>: [9.5, 1.0], <span class="s">"socket"</span>: <span class="s">"Coupler_F"</span> }, … ],
+  <span class="s">"sockets"</span>: [ { <span class="s">"name"</span>: <span class="s">"Wheel_L1"</span>, <span class="s">"bone"</span>: <span class="s">"bogie1"</span>, <span class="s">"position_m"</span>: [7.4, 0.8, 0.0] }, … ],
+  <span class="s">"clips"</span>:   [ { <span class="s">"name"</span>: <span class="s">"Door_L1"</span>, <span class="s">"frames"</span>: 24, <span class="s">"bones"</span>: [<span class="s">"door_l1"</span>] }, … ],
+  <span class="s">"vhids"</span>:   [ { <span class="s">"component"</span>: <span class="s">"CabDoor_L"</span>, <span class="s">"bone"</span>: <span class="s">"door_l1"</span>, <span class="s">"clips"</span>: [<span class="s">"Door_L1"</span>] }, … ],  <span class="c">// ABP VHID entries</span>
+  <span class="s">"bone_map"</span>: { <span class="s">"1_0500_door_l1"</span>: <span class="s">"door_l1"</span>, … },  <span class="s">"weights"</span>: { <span class="s">"1_0500_engine"</span>: <span class="s">"Body_Pivot"</span>, … },
+  <span class="s">"files"</span>: { … }
+}</pre>
+<p>Every number the editor asks for in Part&nbsp;4 §6, Part&nbsp;5 §2 and Part&nbsp;3 §8 is here, in metres with the Blender sign convention; the editor helper prints them converted.</p>
+
+<h1>6 · The editor helper</h1>
+<p><code>tools/tsw/tsw_editor_setup.py</code> runs inside the editor (Output Log ▸ Cmd: <code>py "C:/path/tsw_editor_setup.py"</code>) after you edit its <code>CONFIG</code> block (sheet path,
+plugin root, friendly name, max speed). It then:</p>
+<ol class="steps">
+<li>creates the plugin folder layout;</li>
+<li>imports <code>SK_&lt;Name&gt;_Ext.fbx</code> as a skeletal mesh with a new skeleton, and the cab onto that skeleton;</li>
+<li>imports every <code>Animation/*.fbx</code> as an AnimSequence on it;</li>
+<li>imports the UCX static mesh (collision generation off);</li>
+<li>creates <code>RVD_&lt;Name&gt;</code> and sets name, max speed, flags and bounds; links the RVM/RVV classes if they already exist;</li>
+<li>creates an empty <code>FRM_&lt;Name&gt;</code>;</li>
+<li>prints the physics numbers (Y negated), buffer and coupler offsets, the ABP list contents and the VHID entries.</li>
+</ol>
+<p>It does not create the RVM, RVV or ABP Blueprints or the SimuGraph: component editing inside Blueprints is not exposed to Python in 4.26. Every step is wrapped so a failure prints and the
+script continues; property names that do not resolve are reported with “set it in the Details panel”. <span class="pill u">check</span> on first use: the data-asset factory call and the
+<code>RailVehicleDefinition</code> property names are the two things most likely to need a small edit.</p>
+
+<h1>7 · How it was tested</h1>
+<ol class="steps">
+<li><b>Scene:</b> <code>tools/tsw/build_test.py</code> builds a TSC-named loco (+Y forward): body, roof, LOD-2 twin and a <code>shadow_</code> mesh (to be dropped), four doors keyed 0–24 with <code>tsw_vhid</code>, two bogies with three wheels each (cylinders rotated so their local axes do <em>not</em> match the world, to prove the world-aligned bones), a pantograph base → lower arm → upper arm → head chain keyed 0–30, a wiper with its action in an NLA strip, four buffers, a driver empty, two coupling empties, a custom audio socket, a cab collection with a throttle lever keyed 0–20, and a tagged collision mesh.</li>
+<li><b>Rig maths:</b> for the door, the pantograph (both arms, one as a child of the other), the wiper (NLA) and the lever, the bone's world pose at sampled frames matched the object's motion applied to the rest frame to within 1e-4; a vertex of the static pantograph head followed the upper-arm bone at frame 30; the generated wheel clip rolled the wheel top towards +X.</li>
+<li><b>Output:</b> 22 bones (Root, Body_Pivot, 4 doors, 2 bogies, 6 axles, 2 pantograph arms, wiper, 4 buffers, lever), 17 sockets, 8 clips (4 doors, pantograph, wipers, throttle, wheels), ext mesh 416 vertices, cab mesh 8 vertices, UCX, build sheet. No rig left in the scene afterwards.</li>
+<li><b>Round trip:</b> re-importing the exterior FBX gave the same bone tree with the same parents, every socket as an empty under the right bone at the right position, and the mesh at 18.5 × 3.0 × 4.16 m; importing <code>Door_L1.fbx</code> gave a take named <code>Door_L1</code> whose door bone sat at 79.8° on the last frame (keyed 80.2°); <code>Wheels_FullRotation.fbx</code> gave 174° at frame 29 of 60.</li>
+</ol>
+<p>Repeat it with <code>python tools/tsw/build_test.py &lt;out&gt;</code> under the bpy wheel or <code>blender -b --python tools/tsw/build_test.py -- &lt;out&gt;</code>; it prints <code>ERRORS: []</code> when all checks pass.</p>
+
+<h1>8 · Extending the tools</h1>
+<table>
+<thead><tr><th style="width:48mm">Want</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>A bone the game should move that has no animation yet (future sander, cab blind)</td><td>Give the object <code>tsw_bone</code>.</td></tr>
+<tr><td>Rods and valve gear in the wheel clip</td><td>Key one revolution of wheels + rods in the master as an action named <code>Wheels_FullRotation</code> (or tag it <code>tsw_clip</code>); the add-on bakes it instead of generating the plain one.</td></tr>
+<tr><td>Two doors on one button</td><td>Same <code>tsw_clip</code> on both; one clip, one VHID entry.</td></tr>
+<tr><td>Hand-made LOD meshes</td><td>Export the LOD-2 twins as a second run with <code>tsw_skip</code> on LOD 1 and the twins renamed to LOD 1, then import as LOD levels. Or let the editor reduce.</td></tr>
+<tr><td>Different forward rotation</td><td><code>ROT_Y_TO_X</code> at the top of the file; identity if your master already faces +X.</td></tr>
+<tr><td>Dense keys too heavy</td><td><code>bake_anim_simplify_factor</code> in <code>export_tsw</code> (0 = keep every frame).</td></tr>
+<tr><td>Materials from the TF3 branch</td><td>Export the PBR sheets with the TF3 packer, set roughness = 1 − gloss, repack ORM; the FBX only needs the base colour to find the material by name.</td></tr>
+</tbody></table>
+
+<h1>9 · Further scripts worth writing</h1>
+<table>
+<thead><tr><th style="width:52mm">Script</th><th>What it would save</th></tr></thead>
+<tbody>
+<tr><td>VHID hitbox table</td><td>From the lever sockets, print each VirtualHIDInteractionComponent's attach socket, extent and interaction direction in UE centimetres so the RVV is filled from a list.</td></tr>
+<tr><td>SimuGraph skeleton from the build sheet</td><td>The SA asset format is a Nodes[] array with typed structs; once the editor's Python can create one (or by reading a saved SA back), emit the Bogie and Axle nodes with offsets, gauge and radius from <code>axles</code> / <code>bogies</code>.</td></tr>
+<tr><td>Control-value map from the TSC blueprint</td><td>Read the engine blueprint's control list (Regulator, Reverser…) and the .ia animation names and propose the <code>tsw_vhid</code> / <code>tsw_clip</code> tags, so a TSC-ready loco needs no manual tagging.</td></tr>
+<tr><td>Thumbnail from Blender</td><td>Render the three-quarter view used by the web branch at TSW's thumbnail size as a stop-gap before the preview-scene plugin shot.</td></tr>
+<tr><td>Batch export</td><td>Loop over all master .blend files headless (like <code>build_test.py</code> does) and refresh every vehicle's FBX set and build sheet in one run.</td></tr>
+<tr><td>Post-import checker in the editor</td><td>Python in the editor: list the imported skeleton's bones and sockets and diff them against the build sheet; list the ABP's Axles/Bogies entries and warn about missing sim node references.</td></tr>
+</tbody></table>
+
+<h1>10 · Known limits</h1>
+<ul>
+<li>Objects are converted, not armatures: if the master already has an armature (valve gear rigged with bones), its bones are not merged; export that mesh by hand.</li>
+<li>Shape keys are not baked into bones; a part that must deform (a bellows) needs a hand-made rig.</li>
+<li>Every bone is world-aligned (X forward, Y left, Z up). Fine for everything scrubbed from clips; if the engine's <code>Axles</code> spin axis turns out to be a bone-local axis other than the one the generated wheel clip uses, keep the clip route (exact) and tell the add-on's author.</li>
+<li>An object with two overlapping NLA strips in different tracks is baked as their blend, which is probably not what you keyed; keep one strip per object or set <code>tsw_clip</code> and separate the tracks.</li>
+<li>Materials and textures are not converted; the FBX carries names and base colour only. Build the master material in the editor.</li>
+<li>The editor helper is untested in the editor and creates no Blueprints; expect to fix one or two property names on first run.</li>
+</ul>
+
+</body></html>

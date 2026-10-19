@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 1 — What a TSW Vehicle Actually Is</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 1</div>
+    <h1>What a Train Sim World vehicle actually is</h1>
+    <div class="sub">In TSC a vehicle is a blueprint graph; in TSW it is a small family of Unreal assets that split <em>what the vehicle is</em> from <em>what it looks like</em>.
+      This part reads that family the way the game does, follows one key press to a turning wheel, and maps every TSC idea you already have onto its TSW counterpart.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Model and view: why the split exists</li>
+    <li>From a key press to a turning wheel</li>
+    <li>The RVD, field by field</li>
+    <li>Inside the RVM</li>
+    <li>Inside the RVV</li>
+    <li>The cooked-asset rule</li>
+    <li>The TSC map, in detail</li>
+  </ol></div>
+  <div class="foot">Component lists and field values in this part were read from <code>RVM_ART_Thomas</code>, <code>RVV_ART_Thomas</code> and <code>RVD_ART_Thomas</code>
+  in the running editor, with the Class&nbsp;47 and the 12-ton van for comparison (<span class="pill v">verified</span>).</div>
+</section>
+
+<h1>1 · Model and view: why the split exists</h1>
+<p>The RVM (model) is created when the route loads and is never destroyed, even for trains parked off-map in the “vault”. The RVV (view) is spawned when the
+player comes near and destroyed when they go far. The RVA (audio) comes and goes with the view. That one design decision explains most of what follows:</p>
+<ul>
+<li>Anything that must remember state (throttle position, doors, lights, fuel) lives on the RVM, tagged <code>SaveGame</code>.</li>
+<li>The RVV can be heavy (the Class&nbsp;47's has 221 components) because only a handful exist at once.</li>
+<li>Keyboard input goes to the RVM, not the RVV, so the AI driver and the HUD work when the visuals are gone.</li>
+<li>A control (VHID) is always two components: a logic half on the RVM and a clickable half on the RVV, linked by name.</li>
+</ul>
+<figure>
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9.5">
+  <rect x="10" y="20" width="700" height="34" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/>
+  <text x="20" y="41" font-weight="bold" fill="#1f6fb2">RVM_MyLoco</text><text x="110" y="41" font-size="8.8">created at route load ──────────────────────────────────────────────────────── never destroyed (survives the vault)</text>
+  <rect x="150" y="70" width="180" height="30" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="240" y="89" text-anchor="middle" font-size="8.8" fill="#1e6b35" font-weight="bold">RVV + RVA (player near)</text>
+  <rect x="470" y="70" width="150" height="30" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="545" y="89" text-anchor="middle" font-size="8.8" fill="#1e6b35" font-weight="bold">RVV + RVA (near again)</text>
+  <text x="400" y="89" text-anchor="middle" font-size="8.5" fill="#5b6676">far away: no view, sim keeps running</text>
+  <text x="10" y="130" font-size="8.8" fill="#5b6676">RVV and RVA are disposable. Anything that must persist is a property on the RVM. The RVV's <tspan font-family="DejaVu Sans Mono">ModelActor</tspan> points back at the RVM; the RVM's root component spawns the RVV.</text>
+</svg>
+<figcaption><b>Figure 1.1 · Lifetimes.</b> When you climbed into Thomas's cab, the driver pawn was attached to the RVV, which was attached to the RVM; both shared one world
+position. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>2 · From a key press to a turning wheel</h1>
+<figure>
+<svg viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="k1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker>
+  <marker id="k2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b0304a"/></marker></defs>
+  <rect x="10" y="20" width="120" height="50" rx="5" fill="#fff" stroke="#8a96a6"/><text x="70" y="40" text-anchor="middle" font-weight="bold">Player</text><text x="70" y="56" text-anchor="middle" font-size="8.5">A / D keys, or drags</text><text x="70" y="67" text-anchor="middle" font-size="8.5">the lever in the cab</text>
+  <rect x="160" y="10" width="150" height="70" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="235" y="28" text-anchor="middle" font-weight="bold" fill="#1e6b35">RVV hitbox</text><text x="235" y="44" text-anchor="middle" font-size="8.5">VirtualHIDInteraction</text><text x="235" y="56" text-anchor="middle" font-size="8.5">on the lever socket</text><text x="235" y="70" text-anchor="middle" font-size="8.5">model component = "ThrottleControl"</text>
+  <rect x="340" y="10" width="160" height="70" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="420" y="28" text-anchor="middle" font-weight="bold" fill="#1f6fb2">RVM lever logic</text><text x="420" y="44" text-anchor="middle" font-size="8.5">IrregularLever "ThrottleControl"</text><text x="420" y="56" text-anchor="middle" font-size="8.5">input id SimpleThrottle</text><text x="420" y="70" text-anchor="middle" font-size="8.5">input → value map → output 0..1</text>
+  <rect x="530" y="10" width="180" height="70" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="620" y="28" text-anchor="middle" font-weight="bold" fill="#1f6fb2">RVM event graph</text><text x="620" y="44" text-anchor="middle" font-size="8.5">OnOutputValueChanged →</text><text x="620" y="56" text-anchor="middle" font-size="8.5">Set Simulation Parameter</text><text x="620" y="70" text-anchor="middle" font-size="8.5">node PowerInput · param InputValue</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#k1)"><path d="M130,45 L158,45"/><path d="M310,45 L338,45"/><path d="M500,45 L528,45"/><path d="M620,80 L620,108"/></g>
+  <path d="M70,70 C70,120 300,120 340,60" stroke="#5b6676" stroke-width="1.2" stroke-dasharray="4 3" fill="none" marker-end="url(#k1)"/>
+  <text x="200" y="118" font-size="8" fill="#5b6676">keyboard goes straight to the RVM component (works with no view loaded)</text>
+  <rect x="470" y="110" width="240" height="60" rx="5" fill="#e0f0ee" stroke="#177a6e"/><text x="590" y="128" text-anchor="middle" font-weight="bold" fill="#177a6e">SimuGraph (SA asset)</text><text x="590" y="144" text-anchor="middle" font-size="8.5">PowerInput → Motor → Gearbox → Axle1..n</text><text x="590" y="158" text-anchor="middle" font-size="8.5">axles report SpeedAtRail_MS, WheelRotation_DEG</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#k1)"><path d="M470,140 L380,140"/><path d="M530,170 L420,210"/><path d="M650,170 L650,210"/></g>
+  <rect x="200" y="120" width="180" height="46" rx="5" fill="#e8f1fa" stroke="#1f6fb2"/><text x="290" y="138" text-anchor="middle" font-weight="bold" fill="#1f6fb2">RVM physics component</text><text x="290" y="152" text-anchor="middle" font-size="8.5">ConnectedWheels ← axle pins</text><text x="290" y="162" text-anchor="middle" font-size="8.5">moves the whole vehicle along the track</text>
+  <rect x="300" y="212" width="220" height="60" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="410" y="230" text-anchor="middle" font-weight="bold" fill="#1e6b35">RVV Animation Blueprint</text><text x="410" y="246" text-anchor="middle" font-size="8.5">binding Simulation_Axle2_WheelRotation_DEG</text><text x="410" y="258" text-anchor="middle" font-size="8.5">→ AxleRotationAlpha = deg / 360</text><text x="410" y="269" text-anchor="middle" font-size="8.5">→ scrubs Wheels_FullRotation.anim</text>
+  <rect x="560" y="212" width="150" height="60" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="635" y="230" text-anchor="middle" font-weight="bold" fill="#a86400">RVA audio</text><text x="635" y="246" text-anchor="middle" font-size="8.5">speed thresholds → chuffs</text><text x="635" y="258" text-anchor="middle" font-size="8.5">VHID events → clicks, horn</text>
+  <rect x="300" y="286" width="220" height="34" rx="5" fill="#fbeaee" stroke="#b0304a"/><text x="410" y="300" text-anchor="middle" font-weight="bold" fill="#b0304a">SK_MyLoco_Ext mesh</text><text x="410" y="314" text-anchor="middle" font-size="8.5">wheels and rods turn</text>
+  <path d="M410,272 L410,284" stroke="#b0304a" stroke-width="1.5" fill="none" marker-end="url(#k2)"/>
+  <rect x="10" y="212" width="250" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="135" y="230" text-anchor="middle" font-weight="bold">The same VHID output also drives</text><text x="20" y="246" font-size="8.5">• HUD: DisplayName "Throttle", named ranges</text><text x="20" y="258" font-size="8.5">• RVV graph: lights, smoke, faces</text><text x="20" y="269" font-size="8.5">• cab ABP: the lever mesh scrubs its own clip</text>
+</svg>
+<figcaption><b>Figure 1.2 · The whole system on one page.</b> Solid arrows are the main path; the dashed one is why keyboard input survives the view being unloaded.
+Every later part zooms into one box. <span class="pill v">verified</span></figcaption>
+</figure>
+
+<h1>3 · The RVD, field by field</h1>
+<p>Created by right-click ▸ Miscellaneous ▸ Data Asset ▸ class <code>RailVehicleDefinition</code>. It is the only asset the rest of the game needs to know about;
+formations, timetables and the spawn menu reference nothing else. Thomas's values in the right column. <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:52mm">Property</th><th>What it does</th><th style="width:40mm">Thomas</th></tr></thead>
+<tbody>
+<tr><td><code>ModelActorAsset</code> / <code>ViewActorAsset</code></td><td>Required. Your RVM and RVV Blueprint classes.</td><td>RVM_ART_Thomas_C / RVV_…</td></tr>
+<tr><td><code>AdditionalViewActorAssets</code></td><td>Extra view actors spawned with the RVV; the RVA goes here.</td><td>[RVA_ART_Thomas_C]</td></tr>
+<tr><td><code>VehicleCategory</code></td><td>Locomotive, wagon, coach, multiple-unit car; drives filters and AI behaviour.</td><td>Locomotive</td></tr>
+<tr><td><code>bIsElectric / bIsDiesel / bIsSteam</code></td><td>UI flags. Thomas has all three false although his description says “Steam”.</td><td>false ×3</td></tr>
+<tr><td><code>MaximumSpeed</code></td><td>m/s. HUD and AI speed planning.</td><td>15.65 (35 mph)</td></tr>
+<tr><td><code>bUsesSimpleControls</code></td><td>One combined throttle/brake lever scheme.</td><td>true</td></tr>
+<tr><td><code>ApproximateBounds / Offset / Length</code></td><td>Centimetres, cached from the mesh; <code>bRegenBounds</code> recomputes. Used for spawning and vault packing.</td><td>(654, 242, 290)</td></tr>
+<tr><td><code>HUDMetersWidget</code>, <code>ThumbnailTexture</code></td><td>HUD dial cluster; menu picture.</td><td>WBP_HUD_Artemis_C</td></tr>
+<tr><td><code>FriendlyName, ManufacturerName, EngineDescription, TypeDescription, CountryTableRow</code></td><td>UI text; use the design-name form from the store guide.</td><td>“Thomas the Tank Engine”…</td></tr>
+<tr><td><code>Weight / TractiveEffort / PowerOutput UIValue</code></td><td>Info-card numbers; cosmetic.</td><td>0</td></tr>
+<tr><td><code>Male/FemaleDriverOutfit, DriverCharacterCollection</code></td><td>Crew you see in the cab (data assets).</td><td>DA_ART_Thomas_*</td></tr>
+<tr><td><code>ConnectivityData</code></td><td>Per end: which couplers, hoses and jumper cables must match the neighbour. Auto-filled from the RVM's coupler components (<code>bRecalculateData</code>).</td><td>ThomasAndFriends_Hook, MR hose</td></tr>
+<tr><td><code>bIsDrivable, bIsSelectable, bIsAvailableForFormationEditor, bIsAvailableForUserScenarios</code></td><td>Where the vehicle is offered.</td><td>true, true, true, false</td></tr>
+<tr><td><code>bIsSubstitutableUnit, CommonnessWeighting</code></td><td>Let the game swap it in for a similar timetable vehicle; how often.</td><td>true, 0</td></tr>
+</tbody></table>
+<div class="box warn"><span class="t">Spawning needs a formation</span><p>Nothing spawns an RVD directly. A <code>TrainFormation</code> data asset (<code>FRM_</code>) lists RVDs in order; timetables,
+scenarios and the spawn menu pick formations. Make <code>FRM_MyLoco</code> containing just <code>RVD_MyLoco</code> so the loco can be placed on its own.</p></div>
+
+<h1>4 · Inside the RVM</h1>
+<p>The RVM is a Blueprint whose parent is <code>RailVehicle</code>. It has no meshes: it is a bag of logic components plus an event graph. Thomas's has 21 components,
+four inherited: <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:52mm">Component</th><th style="width:48mm">Class</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td>ModelChildActorComponent0 (root)</td><td>inherited</td><td>Spawns the RVV (<code>view_actor_asset</code>) and the additional view actors.</td></tr>
+<tr><td>RailVehiclePhysicsComponent0</td><td>inherited, class RailVehicleComponent</td><td>Size, mass, buffers, drag, couplers' parent, simple physics, VHID presets, events. You configure it, you do not add it.</td></tr>
+<tr><td>GameplayTasks / GameplayTagStatus</td><td>inherited</td><td>Engine plumbing.</td></tr>
+<tr><td><b>Simulation</b></td><td>SimulationComponent</td><td>Points at the SA_ SimuGraph. Name it exactly <code>Simulation</code>; everything refers to it by that name.</td></tr>
+<tr><td>Engineer'sEnvironment, Secondman'sEnvironment</td><td>InteractionEnvironmentComponent</td><td>Places a person can be (DRIVER / FRONT…). Controls, seats and cameras belong to one.</td></tr>
+<tr><td>ThrottleControl, Reverser</td><td>IrregularLeverComponent</td><td>Levers: input → value map → output, notches.</td></tr>
+<tr><td>Whistle, Headlights, Torch</td><td>PushButtonComponent</td><td>Push-and-hold or toggle buttons.</td></tr>
+<tr><td>CabDoor_L / CabDoor_R</td><td>RailVehicleDoorComponent</td><td>Doors: state machine with lock, target state, transition time.</td></tr>
+<tr><td>Coupler_F / Coupler_B, AirHose_F/B, JumperCable_F/B</td><td>Coupler / AirHose / JumperCable</td><td>Connection points; ids must match the neighbour's.</td></tr>
+<tr><td>SeatManager</td><td>SeatManagerComponent</td><td>Who sits where; RVV seats register with it.</td></tr>
+</tbody></table>
+<p><b>A wagon is a locomotive with the driving parts removed:</b> the 12-ton van's RVM has the four inherited components, a Simulation, two couplers, two vacuum hoses,
+four door components, push buttons for handbrake and door locks, and a NumberingComponent. No throttle, no environments, no seats.</p>
+<div class="box tip"><span class="t">The RVM component list is the feature list</span><p>Adding a feature means adding a model component here, a matching hitbox on the RVV, and usually a few
+nodes in the event graph or the SimuGraph. That is the same shape as TSC's “control value + animation + Lua handler”, just in three places you can see.</p></div>
+
+<h1>5 · Inside the RVV</h1>
+<p>Parent class <code>RailVehicleView</code>. Thomas's has 54 components (Class&nbsp;08: 179; Class&nbsp;47: 221), grouped by purpose: <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:30mm">Group</th><th>Components</th></tr></thead>
+<tbody>
+<tr><td>Meshes</td><td><code>SK_RailVehicle</code> (exterior skeletal mesh, ABP_…_Ext), <code>SK_Cab</code> (cab mesh, ABP_…_Cab), <code>CSX_Collision</code> (UCX static mesh), ground shadow, <code>Coupler_F/B</code> (ConnectionSkeletalMesh with a tiny ABP), <code>Blocker_F/B</code> boxes.</td></tr>
+<tr><td>Interaction</td><td>One <code>VirtualHIDInteractionComponent</code> per control (CabDoor_L/R, Torch, Headlights…), <code>SeatComponent</code>s, <code>InteractionEnvironmentCameraComponent</code>s (driver, second man, head-out L/R), <code>CameraTransitionComponent</code>s (step up/down), auto-created tooltip anchors.</td></tr>
+<tr><td>Lights and VFX</td><td><code>LinearElectricLightComponent</code> controllers driving SpotLights, Niagara smoke, instanced wheel blur, auto-added RailVehicleParticleSystems (sparks, water spray, kick-up) at the <code>Wheel_*</code> sockets.</td></tr>
+<tr><td>Housekeeping</td><td><code>ComponentLODManagement</code> (turns components off by distance), audio asset manager.</td></tr>
+</tbody></table>
+<p>This is where your Blender work lands: the two skeletal meshes, their animation blueprints, the collision mesh and the sockets that everything else attaches to.
+Parts&nbsp;2 and 3 prepare them; Part&nbsp;4 wires them in.</p>
+
+<h1>6 · The cooked-asset rule</h1>
+<p>Everything that ships with the game is <em>cooked</em>: editor data stripped. You can place, spawn and read Dovetail's vehicles at runtime, but you cannot open their
+Blueprint graphs or SimuGraphs, and Dovetail's FAQ confirms you cannot modify existing trains. Everything in this set about Dovetail's vehicles was read from the
+running game through Python (Part&nbsp;6 §6), not by opening the assets. Your own plugin is uncooked source, so none of those limits apply to it. <span class="pill v">verified</span></p>
+
+<h1>7 · The TSC map, in detail</h1>
+<table>
+<thead><tr><th style="width:48mm">TSC</th><th style="width:52mm">TSW</th><th>What changes for you</th></tr></thead>
+<tbody>
+<tr><td>Engine blueprint: name, mass, length, max speed</td><td>RVD text fields; physics component <code>Node.Width/Height/Length/Mass</code>; RVD <code>MaximumSpeed</code></td><td>Metres and kg on the RVM, centimetres in the RVD bounds. The build sheet (Part&nbsp;7) prints them.</td></tr>
+<tr><td>Bogey blueprints, pivots in XML</td><td>Bogie bones in the ABP's <code>Bogies</code> list; physics body tracks the rails</td><td>The engine yaws the bogie bones; the pivot is the bone position. XML had the final say in TSC; here the skeleton does.</td></tr>
+<tr><td>Wheel nodes rotated by the game</td><td><code>Axles</code> bone list or a one-revolution clip scrubbed by <code>WheelRotation_DEG</code></td><td>Export <code>Wheels_FullRotation</code>; rods ride along in the same clip.</td></tr>
+<tr><td>Control values (Regulator, Reverser…)</td><td>VHID output values</td><td>Same idea: a named 0..1 (or −1..1) number everything listens to.</td></tr>
+<tr><td>.ia animation 0..N frames = control value 0..1</td><td>Clip scrubbed at time = VHID output</td><td>Direct translation; Part&nbsp;3.</td></tr>
+<tr><td>Sim blueprint: tractive effort curve, brakes</td><td>SimuGraph nodes; <code>SimplePhysics</code> block as fallback</td><td>Build a minimal graph first (Part&nbsp;5), grow it later.</td></tr>
+<tr><td>Lua: <code>Call("GetControlValue")</code>, <code>OnControlValueChange</code>, timers</td><td>Event graph: bind <code>OnOutputValueChanged</code>, Set/Get Simulation Parameter, <code>OnPreSimulate</code></td><td>Visual nodes instead of text; physics logic moves into SimuGraph nodes.</td></tr>
+<tr><td>Cab view .igs with its own camera</td><td><code>SK_Cab</code> on the same skeleton + an InteractionEnvironmentCamera</td><td>The cab is a second mesh, not a second vehicle.</td></tr>
+<tr><td>Lights by material / light nodes</td><td>LinearElectricLight controllers + lights or emissive parameters</td><td>Driven by a Headlights VHID through the RVV graph.</td></tr>
+<tr><td>Sound blueprints</td><td>RVA actor with Sound Cues, curves, thresholds</td><td>Optional at first; two cues make a boilerplate.</td></tr>
+<tr><td>Preload / scenario placing</td><td>Formation data asset</td><td>One per vehicle.</td></tr>
+</tbody></table>
+
+</body></html>

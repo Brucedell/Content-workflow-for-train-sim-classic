@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>TSW Part 6 — View Polish, Audio, Test, Ship</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<section class="cover">
+  <div class="top">
+    <div class="series">Train Sim World · Vehicle Workflow Guide</div>
+    <div class="partno">Part 6</div>
+    <h1>View polish, audio, test, ship</h1>
+    <div class="sub">Once the box drives: the parts that make it a locomotive. Lights and particles on the view, the audio actor, collision and LOD housekeeping, the pre-flight
+      checklist that catches most “it does not spawn” cases, how to interrogate the running editor when it does not, and what is known about distributing the plugin.</div>
+  </div>
+  <div class="toc"><h3>In this part</h3><ol>
+    <li>Lights</li>
+    <li>Particles, wheel blur and the view component</li>
+    <li>Collision, blockers and LOD management</li>
+    <li>The RVA: audio that follows the simulation</li>
+    <li>Pre-flight checklist</li>
+    <li>Interrogating the running editor</li>
+    <li>Troubleshooting</li>
+    <li>Shipping the plugin</li>
+    <li>What a finished vehicle contains</li>
+  </ol></div>
+  <div class="foot">Component names and the Python snippets are those used in the live inspection (<span class="pill v">verified</span>). Packaging and distribution were not
+  covered by the inspection or the supplied sources beyond Dovetail's FAQ; that section is marked <span class="pill u">check</span> throughout.</div>
+</section>
+
+<h1>1 · Lights</h1>
+<p>A <code>LinearElectricLightComponent</code> is a tiny controller: it takes a 0..1 value and maps it through <code>out_intensity_range</code> to a real light or an emissive material
+parameter. The pattern on Thomas: Headlights VHID output → RVV event → <code>HeadlightController</code> → <code>Headlight</code> (SpotLight). The Class&nbsp;47 has twenty of them: tail,
+marker, cab, desk and warning lamps. <span class="pill v">verified</span></p>
+<ol class="steps">
+<li>RVM: PushButtonComponent <code>Headlights</code>, TOGGLE, InputIdentifier <code>Headlights</code>; add VHID presets <code>HeadlightsOn</code>/<code>Off</code> on the physics component.</li>
+<li>RVV: a SpotLight at the lamp position (a <code>socket_Headlight</code> empty in Blender gives you the spot), a <code>LinearElectricLightComponent</code> <code>HeadlightController</code> pointing at it.</li>
+<li>RVV event graph: bind the Headlights hitbox's <code>OnOutputValueChanged</code> → set the controller's value.</li>
+<li>Lamp glass: an emissive parameter on the material instance, driven by the same controller.</li>
+</ol>
+
+<h1>2 · Particles, wheel blur and the view component</h1>
+<p>The inherited <code>RailVehicleViewComponent</code> holds <code>particle_system_definitions[]</code> (Arcing_Sparks, Water_Spray, Kickup, each with a Niagara system). The engine adds
+the three RailVehicleParticleSystem components itself and spawns them at the <code>Wheel_*</code> sockets, which is why the add-on generates those sockets at the rail contact. Also here:
+wheel-slip sparks, impact volume range (buffer clashes), the per-axle joint clack, rail singing (an ActorValueBinding reading a sim parameter), and <code>enable_coupler_vhid</code>.
+Thomas adds Niagara smoke at the chimney and whistle, and an instanced wheel-blur mesh switched by the RVM's <code>OnVehicleSpeedChanged</code>. <span class="pill v">verified</span></p>
+
+<h1>3 · Collision, blockers and LOD management</h1>
+<ul>
+<li>Walkable collision is the <code>UCX_</code> static mesh component, not the skeletal mesh's physics asset; in some vehicles it doubles as the audio occluder.</li>
+<li><code>Blocker_F/B</code> boxes stop the player walking off a footplate that has no door.</li>
+<li><code>ComponentLODManagementComponent</code> disables lights, Niagara and the cab mesh beyond set distances; put it on every RVV.</li>
+<li>Skeletal mesh LODs: generate in the asset's LOD settings; the cab mesh can simply be culled by distance.</li>
+</ul>
+
+<h1>4 · The RVA: audio that follows the simulation</h1>
+<figure>
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.8">
+  <defs><marker id="r6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="20" width="200" height="130" rx="7" fill="#fdf3e2" stroke="#a86400" stroke-width="1.5"/>
+  <text x="110" y="40" text-anchor="middle" font-weight="bold" fill="#a86400">RVA_MyLoco (RailVehicleAudio)</text>
+  <text x="20" y="58">AudioToViewBindings: re-attaches to</text><text x="20" y="70">Audio* sockets after the RVV respawns</text>
+  <text x="20" y="88">AudioComponent_0: SC_Running (loop)</text>
+  <text x="20" y="100">AudioComponent_1: SC_Horn</text>
+  <text x="20" y="118">cab AO mesh + SoundMix: muffles</text><text x="20" y="130">outside when the camera is inside</text>
+  <text x="20" y="144" fill="#5b6676">ComponentLODManagement</text>
+  <rect x="250" y="20" width="200" height="60" rx="6" fill="#e0f0ee" stroke="#177a6e"/><text x="350" y="40" text-anchor="middle" font-weight="bold">continuous values</text><text x="350" y="56" text-anchor="middle">speed, load → Sound Cue parameters</text><text x="350" y="70" text-anchor="middle">(MPH, pitch) via float curves FC_*</text>
+  <rect x="250" y="90" width="200" height="60" rx="6" fill="#e0f0ee" stroke="#177a6e"/><text x="350" y="110" text-anchor="middle" font-weight="bold">thresholds</text><text x="350" y="126" text-anchor="middle">RailVehicleParameterChangedDelegate</text><text x="350" y="140" text-anchor="middle">2.24 m/s “running”, 0.045 m/s “stopped”</text>
+  <rect x="490" y="20" width="220" height="60" rx="6" fill="#e8f1fa" stroke="#1f6fb2"/><text x="600" y="40" text-anchor="middle" font-weight="bold">one-shots from VHIDs</text><text x="600" y="56" text-anchor="middle">OnOutputValueChanged(CabDoor_L) → SC_Doors</text><text x="600" y="70" text-anchor="middle">Horn held → SC_Horn while pressed</text>
+  <rect x="490" y="90" width="220" height="60" rx="6" fill="#e6f4ea" stroke="#1e6b35"/><text x="600" y="110" text-anchor="middle" font-weight="bold">from the view component</text><text x="600" y="126" text-anchor="middle">joint clack per axle, rail singing,</text><text x="600" y="140" text-anchor="middle">brake squeal curves (friction, speed)</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#r6)"><path d="M250,50 L212,60"/><path d="M250,120 L212,100"/><path d="M490,50 L452,50"/><path d="M490,120 L452,120"/></g>
+</svg>
+<figcaption><b>Figure 6.1 · How Thomas's audio is wired.</b> 114 sound waves, 15 cues, 6 attenuations, 8 curves. A boilerplate needs two cues: a running loop and a horn. <span class="pill v">verified</span></figcaption>
+</figure>
+<ol class="steps">
+<li>Blueprint Class ▸ <b>RailVehicleAudio</b> ▸ <code>RVA_MyLoco</code> in <code>Audio/RVA</code>; add it to the RVD's <code>AdditionalViewActorAssets</code>.</li>
+<li>Import two waves, make cues <code>SC_MyLoco_Running</code> (looping) and <code>SC_MyLoco_Horn</code>, an attenuation <code>A_MyLoco</code>.</li>
+<li>Two AudioComponents attached to <code>AudioRunning</code> / <code>AudioWhistle</code> sockets; an <code>AudioToViewBindings</code> component so they re-attach when the view respawns.</li>
+<li>Register a speed threshold delegate to switch the running loop on; bind the Horn VHID event to play the horn while held.</li>
+<li>Later: pitch curves vs speed, cab occlusion mesh and SoundMix, door and coupler cues.</li>
+</ol>
+<div class="box"><span class="t">No RVA at all for a wagon</span><p>The streamer leaves <code>AdditionalViewActorAssets</code> empty and keeps a wagon's sounds on the RVV's view component through its
+value bindings: a speed binding from the Simulation component's first axle (he found the MPH parameter worked where km/h did not), a “rumble speed” binding shaped by a float curve
+borrowed from one of the game's mineral wagons, and an axle-speed binding, all updated every tick. The joint clack and rumble then come for free. <span class="pill c">community</span></p></div>
+
+<h1>5 · Pre-flight checklist</h1>
+<table>
+<thead><tr><th style="width:8mm">✓</th><th>Before every test</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td>RVD: ModelActorAsset and ViewActorAsset set; RVM and RVV Reference Actors point at each other</td></tr>
+<tr><td>☐</td><td>RVM has a component named <code>Simulation</code> with an SA assigned; the SA has the nodes the Blueprints and ABP name</td></tr>
+<tr><td>☐</td><td>Every RVV VirtualHIDInteractionComponent.InteractionModelComponent matches an RVM component name exactly (case and spaces)</td></tr>
+<tr><td>☐</td><td>Every lever's InteractionEnvironmentComponent names an environment that exists on the RVM; the camera and seat on the RVV name the same one</td></tr>
+<tr><td>☐</td><td>Skeletal mesh component is named <code>SK_RailVehicle</code>; ABP parent is RailVehicleAnimInstance; Axles list filled</td></tr>
+<tr><td>☐</td><td>Formation contains the RVD; RVD flags drivable, selectable, available for formation editor</td></tr>
+<tr><td>☐</td><td>Everything saved and the plugin enabled before pressing Play</td></tr>
+</tbody></table>
+
+<h1>6 · Interrogating the running editor</h1>
+<p>The editor's Python can read anything, cooked or not, while Play In Editor runs (Output Log ▸ Cmd ▸ <code>py</code>, or the Python console). These read-only snippets produced
+the inspection this set is based on: <span class="pill v">verified</span></p>
+<pre><span class="k">import</span> unreal
+w = unreal.EditorLevelLibrary.get_game_world()                    <span class="c"># the PIE world</span>
+actors = unreal.GameplayStatics.get_all_actors_of_class(w, unreal.Actor)
+
+<span class="c"># which vehicle am I in?  (walk up from the driver pawn)</span>
+p = unreal.GameplayStatics.get_player_controller(w, 0).get_controlled_pawn().get_attach_parent_actor()
+<span class="k">while</span> p: print(p.get_class().get_name(), p.get_name()); p = p.get_attach_parent_actor()
+
+<span class="c"># list a vehicle's components with classes</span>
+rvm = [a <span class="k">for</span> a <span class="k">in</span> actors <span class="k">if</span> a.get_name() == <span class="s">'RVM_MyLoco_C_0'</span>][0]
+<span class="k">for</span> c <span class="k">in</span> rvm.get_components_by_class(unreal.ActorComponent): print(c.get_class().get_name(), <span class="s">'|'</span>, c.get_name())
+
+<span class="c"># dump every property of a component (incl. cooked) to the log; then read Saved/Logs/TS2Prototype.log</span>
+unreal.SystemLibrary.execute_console_command(w, <span class="s">'obj dump '</span> + c.get_path_name())
+
+<span class="c"># the live SimuGraph node list and values</span>
+unreal.SystemLibrary.execute_console_command(w, <span class="s">'obj dump '</span> + rvm.get_path_name() + <span class="s">'.Simulation.SimulationRuntime_1'</span>)
+
+<span class="c"># coupler id of a Dovetail vehicle, to match your own</span>
+<span class="k">for</span> c <span class="k">in</span> rvm.get_components_by_class(unreal.ActorComponent):
+    <span class="k">if</span> c.get_class().get_name() == <span class="s">'CouplerComponent'</span>: print(c.get_name(), c.get_editor_property(<span class="s">'coupler_id'</span>))</pre>
+<p>Dovetail's RVM template actors sit at (0,0,0) and the placed ones are RVV_ / RVA_; <code>get_editor_property</code> works on cooked objects for most fields and <code>obj dump</code> catches the rest.</p>
+
+<h1>7 · Troubleshooting</h1>
+<table>
+<thead><tr><th style="width:52mm">Symptom</th><th>Look at</th></tr></thead>
+<tbody>
+<tr><td>Not in the spawn list</td><td>Formation missing or RVD flags; plugin not enabled; Show Plugin Content.</td></tr>
+<tr><td>Spawns, invisible</td><td>RVV Reference Actor not set on the RVM; <code>SK_RailVehicle</code> name; mesh scale (a 6 cm loco is a units problem, Part&nbsp;2 §10).</td></tr>
+<tr><td>Cannot board</td><td>No CameraTransition / seat; seat's environment name; UCX collision missing so the player falls through.</td></tr>
+<tr><td>HUD shows no levers</td><td>VHID InteractionEnvironmentComponent does not match the environment you occupy; input identifiers empty.</td></tr>
+<tr><td>Levers move, loco does not</td><td>RVM graph writes to wrong node/parameter names; reverser link to motor polarity; brake default 1 with no release.</td></tr>
+<tr><td>Moves, wheels static</td><td>ABP binding node/parameter; Axles list; Wheels_FullRotation not assigned to the evaluator.</td></tr>
+<tr><td>Door clip plays the lever</td><td>VirtualHIDSequenceEntries row points at the wrong sequence or the view hitbox name instead of the RVM component.</td></tr>
+<tr><td>Mirrored left/right</td><td>FBX exported with non-default axes; re-export with the defaults (Part&nbsp;2 §10).</td></tr>
+<tr><td>Will not couple to Dovetail stock</td><td>coupler_id mismatch; read it off a running vehicle (§6); ConnectivityData not recalculated.</td></tr>
+<tr><td>Sounds vanish when you come back</td><td>No AudioToViewBindings; the RVV respawned and the audio stayed attached to the old one.</td></tr>
+<tr><td>Floats above or sinks into the rails</td><td><code>PhysicsBodyOffset</code> Z = half the height; regenerate RVD bounds. <span class="pill c">community</span></td></tr>
+<tr><td>Jumps and twists when hauled</td><td>Two bogie nodes in the SimuGraph with the same offset sign. <span class="pill c">community</span></td></tr>
+<tr><td>Imports a hundred times too big</td><td>Unapplied transforms / unit scale; Part&nbsp;2 §10. <span class="pill c">community</span></td></tr>
+<tr><td>Not found by the game's region filter</td><td>Custom region string; pick an existing region in the RVD. <span class="pill c">community</span></td></tr>
+<tr><td>Packaged, but not in the spawn list in the game</td><td>No formation asset; place it with the community God Mode tool until one exists. <span class="pill c">community</span></td></tr>
+</tbody></table>
+
+<h1>8 · Shipping the plugin</h1>
+<p>The inspection did not cover distribution; the community stream did, end to end, on TSW&nbsp;5. Dovetail's FAQ sets the rules (no redistribution of Dovetail assets, no modified Dovetail
+trains); the mechanics below are the streamer's and worked for him. Before you plan a store product around TSW, read the current FAQ and the community wiki's publishing page and confirm
+what the licence permits commercially. <span class="pill u">check</span></p>
+<figure>
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="8.8">
+  <defs><marker id="p6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <rect x="10" y="20" width="125" height="60" rx="5" fill="#f1e9f8" stroke="#8a4fb8"/><text x="72" y="40" text-anchor="middle" font-weight="bold">1 ContentManifest</text><text x="72" y="54" text-anchor="middle">data asset in the plugin root</text><text x="72" y="68" text-anchor="middle">lists your RVDs</text>
+  <rect x="155" y="20" width="125" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="217" y="40" text-anchor="middle" font-weight="bold">2 Clean DLC folder</text><text x="217" y="54" text-anchor="middle">remove third-party packs,</text><text x="217" y="68" text-anchor="middle">keep bought DLC; editor closed</text>
+  <rect x="300" y="20" width="125" height="60" rx="5" fill="#fff" stroke="#8a96a6"/><text x="362" y="40" text-anchor="middle" font-weight="bold">3 Launch via packer</text><text x="362" y="54" text-anchor="middle">community tool starts the</text><text x="362" y="68" text-anchor="middle">editor from a command line</text>
+  <rect x="445" y="20" width="125" height="60" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="507" y="40" text-anchor="middle" font-weight="bold">4 Cook</text><text x="507" y="54" text-anchor="middle">cook mode ▸ your plugin;</text><text x="507" y="68" text-anchor="middle">old-package warnings are noise</text>
+  <rect x="590" y="20" width="120" height="60" rx="5" fill="#fdf3e2" stroke="#a86400"/><text x="650" y="40" text-anchor="middle" font-weight="bold">5 Distribute</text><text x="650" y="54" text-anchor="middle">plugin + referenced DLC</text><text x="650" y="68" text-anchor="middle">→ one package (~30 MB)</text>
+  <rect x="300" y="105" width="270" height="50" rx="5" fill="#e6f4ea" stroke="#1e6b35"/><text x="435" y="125" text-anchor="middle" font-weight="bold">6 Install and test in the game</text><text x="435" y="141" text-anchor="middle">copy into the game's Content/DLC, start TSW, find it in the depot list</text>
+  <g stroke="#5b6676" stroke-width="1.5" fill="none" marker-end="url(#p6)"><path d="M135,50 L153,50"/><path d="M280,50 L298,50"/><path d="M425,50 L443,50"/><path d="M570,50 L588,50"/><path d="M650,80 L570,118"/></g>
+</svg>
+<figcaption><b>Figure 6.2 · The community packaging route on TSW 5.</b> Six steps from a working plugin to a package another player can drop into their game. <span class="pill c">community</span></figcaption>
+</figure>
+<ol class="steps">
+<li><b>Content manifest.</b> In the plugin's root folder: right-click ▸ Miscellaneous ▸ Data Asset ▸ <code>ContentManifest</code>, named <code>ContentManifest</code>. Open it and add your RVD(s) under the defined rail vehicles. Without it the cook does not pick the vehicle up.</li>
+<li><b>Clean the game's DLC folder.</b> Close the editor. In the game install (<code>…/TS2Prototype/Content/DLC</code>) temporarily remove every third-party package, keeping only the DLC you bought; third-party packs present during the cook break it.</li>
+<li><b>Launch the editor through the community packer</b> (a small tool published on the Dovetail forum's PC Editor section, versions 2.1/2.2 at the time of the stream) from a command prompt. Launched normally, the cook and the package steps do not run.</li>
+<li><b>Cook.</b> Choose cook mode, select your plugin, run. Warnings about old packages and about Dovetail assets referenced by the test timetable can be ignored; remove your test timetable from the map first if you want a quiet log.</li>
+<li><b>Distribute plugin.</b> Pick your plugin, tick the original plugin and any DLC you referenced (none for a standalone wagon), Distribute ▸ OK. The output lands in the editor's folder as a package of a few tens of MB.</li>
+<li><b>Install and test.</b> Copy the package into the game's <code>Content/DLC</code>, start the game: the vehicle appears in the depot list (the streamer's wagon showed under locomotives). Without a formation it is not offered by the spawn menu; place it with the God Mode tool or add the formation and re-cook.</li>
+</ol>
+<h3>The thumbnail</h3>
+<p>Dovetail's forum (PC Editor section) hosts a <i>preview scene</i> plugin: install it like any plugin, open its map, add your formation to its timetable, rebuild, press Play and take the
+screenshot; crop it, import it into <code>Data/RVD</code> and set it as the RVD's <code>ThumbnailTexture</code>. That gives the standard TSW menu picture in two minutes. <span class="pill c">community</span></p>
+<div class="box warn"><span class="t">Keep the master files yours</span><p>As with the Steam-partner case in the store guide: whatever the distribution route, only the cooked plugin leaves
+your machine. The .blend, the textures and the SimuGraph source stay with you.</p></div>
+
+<h1>9 · What a finished vehicle contains</h1>
+<p>Thomas's plugin: 317 assets. Only seven are structural (RVD, RVM, RVV, RVA, SA, SK_Ext, ABP_Ext); everything else is polish. That is the whole argument for building the
+boilerplate first. <span class="pill v">verified</span></p>
+<table>
+<thead><tr><th style="width:36mm">Type</th><th style="width:16mm">Count</th><th style="width:36mm">Type</th><th style="width:16mm">Count</th><th style="width:40mm">Type</th><th>Count</th></tr></thead>
+<tbody>
+<tr><td>SoundWave</td><td>114</td><td>SkeletalMesh</td><td>14</td><td>SoundAttenuation</td><td>6</td></tr>
+<tr><td>Texture2D</td><td>56</td><td>Material / Instance</td><td>8 / 20</td><td>PhysicsAsset</td><td>5</td></tr>
+<tr><td>AnimSequence</td><td>28</td><td>AnimBlueprint</td><td>8</td><td>Blueprints (RVM, RVV, RVA, preview, character)</td><td>5</td></tr>
+<tr><td>SoundCue</td><td>15</td><td>StaticMesh</td><td>8</td><td>Skeleton</td><td>3</td></tr>
+<tr><td>CurveFloat</td><td>8</td><td>Character hair / outfit / collection</td><td>6 / 4 / 1</td><td>RVD, SA, DataTables, RewardLevel, SoundMix, LODSettings, WidgetBP</td><td>1 each</td></tr>
+</tbody></table>
+
+</body></html>

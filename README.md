@@ -1,9 +1,10 @@
-# Content workflow for Train Sim Classic (and Transport Fever 3, and the store)
+# Content workflow for Train Sim Classic (and Transport Fever 3, Train Sim World, and the store)
 
 Guides and tools for turning one Blender train model into (a) a drivable Train Sim Classic (TSC) locomotive or hauled wagon, using
 Blender + BRIAGE, Blueprint Editor 2 (BPE2), Lua and the game, (b) a Transport Fever 3 (TF3) vehicle mod from the same model, via the
-TF3 Model Editor, and (c) a web model for an online store whose landing page lets visitors click doors, pantographs and wipers on the
-vehicle. The aim is as little friction as possible between the model and the vehicle in either game or in the browser.
+TF3 Model Editor, (c) a Train Sim World (TSW) vehicle through the TSW PC Editor (Unreal 4.26), and (d) a web model for an online store whose
+landing page lets visitors click doors, pantographs and wipers on the vehicle. The aim is as little friction as possible between the model
+and the vehicle in any of the games or in the browser.
 
 ## The guide (PDF, one file per topic)
 
@@ -40,6 +41,25 @@ The TF3 set only covers what TF3 adds or changes; shared modelling rules live in
 | 7 | [guide-tf3/pdf/part-07-branch-tooling.pdf](guide-tf3/pdf/part-07-branch-tooling.pdf) | TF3 Export Prep add-on, texture packer, further script ideas |
 
 Rebuild with `NODE_PATH=<global node_modules> node guide-tf3/build.js`.
+
+## The Train Sim World branch guide (PDF, separate folder)
+
+From the same master scene to a TSW vehicle: TSW wants one skinned skeletal mesh, clips scrubbed by values, sockets, and a family of
+Unreal Blueprints and data assets (RVD / RVM / RVV / RVA + SimuGraph). Based on the supplied live inspection of the TSW PC Editor and a
+community livestream of a wagon conversion.
+
+| Part | File | Topic |
+|---|---|---|
+| 0 | [guide-tsw/pdf/part-00-start-here.pdf](guide-tsw/pdf/part-00-start-here.pdf) | The branch point, three games side by side, the four-asset family, plugin folder, conventions, glossary |
+| 1 | [guide-tsw/pdf/part-01-what-a-tsw-vehicle-is.pdf](guide-tsw/pdf/part-01-what-a-tsw-vehicle-is.pdf) | Model/view split, key press to turning wheel, RVD and RVM field by field, TSC knowledge mapped to TSW |
+| 2 | [guide-tsw/pdf/part-02-preparing-the-model.pdf](guide-tsw/pdf/part-02-preparing-the-model.pdf) | Objects become bones: skeleton, weights, sockets, collision, cab mesh, materials, units/axes, export settings |
+| 3 | [guide-tsw/pdf/part-03-animation.pdf](guide-tsw/pdf/part-03-animation.pdf) | Clips scrubbed by values: wheels, doors, levers, pantographs; the TSC animation map; the Animation Blueprint |
+| 4 | [guide-tsw/pdf/part-04-editor-blueprints-and-data.pdf](guide-tsw/pdf/part-04-editor-blueprints-and-data.pdf) | Plugin, import, ABP, RVV, RVM and physics numbers, seat and camera, RVD and formation, Play In Editor |
+| 5 | [guide-tsw/pdf/part-05-simulation-and-controls.pdf](guide-tsw/pdf/part-05-simulation-and-controls.pdf) | SimuGraph nodes and the minimal graph, VHID pairs, presets, where the TSC Lua goes |
+| 6 | [guide-tsw/pdf/part-06-view-audio-test-ship.pdf](guide-tsw/pdf/part-06-view-audio-test-ship.pdf) | Lights, particles, collision/LOD, the RVA, pre-flight checklist, editor Python, troubleshooting, packaging |
+| 7 | [guide-tsw/pdf/part-07-branch-tooling.pdf](guide-tsw/pdf/part-07-branch-tooling.pdf) | TSW Export Prep add-on, the build sheet, the editor-side helper, test results, further scripts |
+
+Rebuild with `NODE_PATH=<global node_modules> node guide-tsw/build.js`.
 
 ## The online store guide (PDF, separate folder)
 
@@ -82,6 +102,9 @@ demo model with the add-on headless; `test/drive.js` (Playwright) loads the page
 | `examples/lua/TrolleyPole.lua` | Dual trolley pole engine script implementing the revised trolley-pole spec | TSC |
 | `tools/blender/tf3_export_prep.py` | Blender add-on (panel **TF3 branch** in the TSC tab): from the TSC-named scene, writes one FBX per LOD with TF3 node names, +X forward, NLA event strips, a `|bounding_box` helper, plus a `.import.lua` metadata template and a name map; the scene is left unchanged | Blender 4.2+ |
 | `tools/tf3_pack_mga.py` | Packs metal / gloss / AO greyscale maps (or a TSC specular map) into a TF3 `_mga` texture | Python 3 + `pip install pillow` |
+| `tools/blender/tsw_export_prep.py` | Blender add-on (panel **TSW branch** in the TSC tab): converts the TSC object hierarchy into one skinned skeletal mesh + armature (one world-aligned bone per moving part, wheels → `axleN`, bogies → `bogieN`, buffers), bakes object keys into pose-bone clips (one FBX per clip, take named after the clip), generates `Wheels_FullRotation`, makes sockets from the TSC empties and wheel meshes, exports a UCX collision mesh and writes a `.tsw_build.json` with the physics/coupler/ABP numbers; the master scene is untouched | Blender 4.2+ |
+| `tools/tsw/tsw_editor_setup.py` | Runs inside the TSW PC Editor (Unreal Python): creates the plugin folders, imports the FBX set and clips, creates the RVD and formation data assets, prints the numbers to type by hand. Written against the UE 4.26 API, not yet run in the editor | TSW PC Editor |
+| `tools/tsw/build_test.py` | Headless test of the TSW add-on: builds a TSC-named loco, exports, checks the bone maths and re-imports the FBX | Blender 4.2 / bpy wheel |
 | `tools/blender/web_export_prep.py` | Blender add-on (panel **Web viewer** in the TSC tab): from the TSC-named scene, writes a web-sized `.glb` (LOD 1 only, TSC-only parts dropped, optional decimation to a triangle budget, tagged actions as named clips) plus a `.manifest.json` of clickable hotspots for the store viewer | Blender 4.2+ |
 
 Example:
@@ -102,6 +125,9 @@ python tools/tsc_crosscheck.py --engine Sample_Engine.xml --sim "Electric Engine
 - The TF3 set is based on the wiki pages supplied (Model Editor, Vehicle Basics/Types/Advanced, Repaints, API index). The Mod Definition,
   .mdl/.msh/.mtl, Guidelines, Publish and External Tools pages were not supplied; statements that depend on them are marked **check**.
   The TF3 Export Prep add-on was tested headless in Blender 4.2 (export + FBX re-import), not through the real Model Editor.
+- The TSW set is based on the supplied live-inspection guide of the PC Editor and a community wagon-conversion stream; statements from the
+  inspection are marked **verified**, inferences **check**, and the streamer's steps **community**. The TSW Export Prep add-on was tested headless
+  in Blender 4.2 (rig maths, export, FBX re-import); the editor helper has not been run inside the editor and nothing was tested in TSW itself.
 - The store set is based on the supplied opportunity analysis plus general web practice; host and provider names, fees and tax figures are
   marked **check**. The Web Export Prep add-on and the demo viewer were tested end to end here: a synthetic locomotive exported headless from
   Blender 4.2, loaded in headless Chromium (WebGL), hotspots clicked and screenshotted with no page errors. Not yet tried on a real
