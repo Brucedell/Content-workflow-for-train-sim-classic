@@ -97,6 +97,7 @@ demo model with the add-on headless; `test/drive.js` (Playwright) loads the page
 | Path | What it does | Needs |
 |---|---|---|
 | `tools/blender/tsc_toolkit.py` | Blender add-on (sidebar tab **TSC**): validate the scene against TSC/BRIAGE rules, apply LOD names, measure bogies/wheels/couplers/collision and write bogie blueprints + patch the vehicle blueprint, step through .ia exports, write a Lua skeleton | Blender 4.2+ |
+| `tools/blender/tsc_texture_split.py` | Blender add-on (panel **Texture split** in the TSC tab): splits a material whose textures exceed the game's size limit into tile materials by *cropping* (not baking): cuts the mesh along the tile borders in UV space, crops every map of the material into tiles, remaps UVs, copies the material settings; lossless and tested headless (see `tools/tsc/texture_split_test.py`) | Blender 4.2+ (numpy) |
 | `tools/tsc_crosscheck.py` | Cross-checks a vehicle blueprint (+ sim, bogies, curves) against the exported geometry (serz XML of the .igs/.GeoPcDx) and lints common mistakes | Python 3 (stdlib only) |
 | `tools/lua_mock/run_trolley_test.py` | Runs `examples/lua/TrolleyPole.lua` against a mock of the TSC Lua API and checks 14 behaviours | Python 3 + `pip install lupa` |
 | `examples/lua/TrolleyPole.lua` | Dual trolley pole engine script implementing the revised trolley-pole spec | TSC |
@@ -125,6 +126,8 @@ python tools/tsc_crosscheck.py --engine Sample_Engine.xml --sim "Electric Engine
 - The TF3 set is based on the wiki pages supplied (Model Editor, Vehicle Basics/Types/Advanced, Repaints, API index). The Mod Definition,
   .mdl/.msh/.mtl, Guidelines, Publish and External Tools pages were not supplied; statements that depend on them are marked **check**.
   The TF3 Export Prep add-on was tested headless in Blender 4.2 (export + FBX re-import), not through the real Model Editor.
+- The texture splitter was tested headless in Blender 4.2 (exact UV mapping, render comparison, no cracks); its output has not been put through
+  BRIAGE or BPE2 here.
 - The TSW set is based on the supplied live-inspection guide of the PC Editor and a community wagon-conversion stream; statements from the
   inspection are marked **verified**, inferences **check**, and the streamer's steps **community**. The TSW Export Prep add-on was tested headless
   in Blender 4.2 (rig maths, export, FBX re-import); the editor helper has not been run inside the editor and nothing was tested in TSW itself.

@@ -225,6 +225,65 @@ Blender uses. Set a <b>Textures directory</b> so every texture is routed to one 
 then force-export the extra frames in BPE2, since only frame 1 is referenced by the IGS (BRIAGE §6.4).</li>
 </ul>
 
+<h2>7.1 · Textures above the limit: split, do not bake</h2>
+<p>Substance Painter hands you one 4K sheet per material. If a sheet is larger than the game (or your conscience) allows, the instinct is to re-unwrap the mesh into
+pieces and bake the big texture down onto several small ones. Do not: baking resamples (blur), repacks the UVs (every Substance re-export then needs a re-bake), and
+takes minutes per map. The sheet is already a grid of texels; <b>crop it</b> instead. Divide the UV square into tiles of the allowed size, cut every face that straddles a
+tile border along that border in UV space, give each tile its own copy of the material pointing at the cropped images, and remap the UVs of each piece into 0..1 of its tile.
+Every source texel lands in exactly one tile texel: nothing is resampled, and the Substance layout is untouched, so a re-export is a one-click re-split.
+<span class="pill v">verified</span> in Blender: see the figure.</p>
+<figure>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Arial" font-size="9">
+  <defs><marker id="ts2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6676"/></marker></defs>
+  <text x="90" y="16" text-anchor="middle" font-weight="bold">UV space, one 4096 sheet</text>
+  <rect x="20" y="24" width="140" height="140" fill="#f4f6f9" stroke="#8a96a6"/>
+  <line x1="90" y1="24" x2="90" y2="164" stroke="#b0304a" stroke-width="1.5" stroke-dasharray="4 3"/><line x1="20" y1="94" x2="160" y2="94" stroke="#b0304a" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="40,40 150,60 120,150 50,120" fill="#e8f1fa" stroke="#1f6fb2" stroke-width="1.5"/>
+  <text x="90" y="180" text-anchor="middle" font-size="8.5" fill="#5b6676">one island crosses both tile lines</text>
+  <text x="90" y="194" text-anchor="middle" font-size="8.5" fill="#b0304a">tile borders at u, v = 2048 / 4096</text>
+  <path d="M170,94 L212,94" stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#ts2)"/>
+  <text x="300" y="16" text-anchor="middle" font-weight="bold">faces cut on the lines</text>
+  <rect x="230" y="24" width="140" height="140" fill="#f4f6f9" stroke="#8a96a6"/>
+  <line x1="300" y1="24" x2="300" y2="164" stroke="#b0304a" stroke-width="1.5"/><line x1="230" y1="94" x2="370" y2="94" stroke="#b0304a" stroke-width="1.5"/>
+  <polygon points="250,40 300,49 300,94 258,94" fill="#fdf3e2" stroke="#a86400" stroke-width="1.2"/>
+  <polygon points="300,49 360,60 349,94 300,94" fill="#e6f4ea" stroke="#1e6b35" stroke-width="1.2"/>
+  <polygon points="258,94 300,94 300,150 260,120" fill="#f1e9f8" stroke="#8a4fb8" stroke-width="1.2"/>
+  <polygon points="300,94 349,94 330,150 300,150" fill="#fbeaee" stroke="#b0304a" stroke-width="1.2"/>
+  <text x="300" y="180" text-anchor="middle" font-size="8.5" fill="#5b6676">edges split at the exact crossing;</text>
+  <text x="300" y="194" text-anchor="middle" font-size="8.5" fill="#5b6676">new vertices are shared: no crack</text>
+  <path d="M380,94 L422,94" stroke="#5b6676" stroke-width="1.6" fill="none" marker-end="url(#ts2)"/>
+  <text x="580" y="16" text-anchor="middle" font-weight="bold">four materials, four 2048 crops, UVs remapped</text>
+  <g>
+  <rect x="440" y="24" width="64" height="64" fill="#fdf3e2" stroke="#a86400"/><polygon points="458,39 504,47 504,88 465,88" fill="#fff" stroke="#a86400"/><text x="472" y="100" font-size="7.5">mat_c0r1</text>
+  <rect x="516" y="24" width="64" height="64" fill="#e6f4ea" stroke="#1e6b35"/><polygon points="516,47 571,57 561,88 516,88" fill="#fff" stroke="#1e6b35"/><text x="548" y="100" font-size="7.5">mat_c1r1</text>
+  <rect x="440" y="112" width="64" height="64" fill="#f1e9f8" stroke="#8a4fb8"/><polygon points="466,112 504,112 504,164 468,136" fill="#fff" stroke="#8a4fb8"/><text x="472" y="188" font-size="7.5">mat_c0r0</text>
+  <rect x="516" y="112" width="64" height="64" fill="#fbeaee" stroke="#b0304a"/><polygon points="516,112 561,112 544,164 516,164" fill="#fff" stroke="#b0304a"/><text x="548" y="188" font-size="7.5">mat_c1r0</text>
+  </g>
+  <text x="600" y="40" font-size="8.5">each tile = a pixel crop of</text><text x="600" y="52" font-size="8.5">every map (colour, normal…)</text>
+  <text x="600" y="72" font-size="8.5">u' = (u·4096 − x0) / 2048</text><text x="600" y="84" font-size="8.5">plus a half-texel inset so</text><text x="600" y="96" font-size="8.5">filtering never wraps</text>
+  <text x="600" y="120" font-size="8.5">unused tiles are not written</text><text x="600" y="132" font-size="8.5">material settings copied</text>
+  <text x="600" y="152" font-size="8.5" fill="#5b6676">cost: a few hundred extra</text><text x="600" y="164" font-size="8.5" fill="#5b6676">faces along the cut lines,</text><text x="600" y="176" font-size="8.5" fill="#5b6676">and one draw call per tile</text>
+  <text x="360" y="222" text-anchor="middle" font-size="8.5" fill="#5b6676">The split is equal in <tspan font-weight="bold">texture</tspan> space, which is what the limit is about; how much mesh lands in each tile follows your UV layout.</text>
+</svg>
+<figcaption><b>Figure 2.5 · Splitting a sheet by cropping.</b> The mesh is cut where the tile borders cross it in UV space; the texture is never resampled. The add-on
+<code>tools/blender/tsc_texture_split.py</code> (Part&nbsp;7 §9) does all three steps on the selected objects.</figcaption>
+</figure>
+<figure>
+<img src="img/texture-split-proof.png" alt="Render of the test body with one 4K grid texture, the same body after splitting into four 2048 tiles, and the near-black difference image; the four tile crops below" style="width:172mm">
+<figcaption><b>Figure 2.6 · The test.</b> A locomotive-shaped body carrying a 4096×4096 colour grid (plus a second map) was smart-unwrapped so islands crossed the tile lines,
+then split into 2×2 tiles of 2048. Six hundred random surface points mapped through their tile to the same source position as before to within 0.001 of a texel; the
+Cycles renders before and after differ by a mean of 0.0014 (seven pixels of 256,000 above 0.1); boundary edges unchanged, so no cracks. The same run also split the sheet into
+1920×1080 tiles (3×4, partial tiles 256 px wide, padded or not) to show the grid is arbitrary. <span class="pill v">verified</span></figcaption>
+</figure>
+<div class="box warn"><span class="t">What the limit actually is</span><p>Neither the BRIAGE manual nor the sample files state a maximum texture size; what they require is
+<b>power-of-two dimensions</b>, and the samples ship at 1024 and 2048. So 1920×1080 is not a size to aim for (it is a screen resolution and not a power of two); the tiles to use
+are 2048×2048, or 1024 if a 2048 is refused. Before splitting anything, put one 4096 texture through BPE2 on a test object: if it converts to <code>.TgPcDx</code> and
+shows in game, you may not need to split at all, and the tool stays for the 8K case. <span class="pill u">check</span></p></div>
+<div class="box tip"><span class="t">Where it sits in the pipeline</span><p>Substance ▸ export maps (4K, Blender preset) ▸ Blender master: assign to the material as usual ▸ <b>on the export
+copy</b> (the IGS job, not the master): TSC tab ▸ <i>Texture split</i> ▸ tile 2048, output = your Textures directory ▸ the tile images are written as TGA/PNG next to the
+others and go through the same ACE/BPE2 conversion ▸ BRIAGE exports one material per tile. Tiles no face uses are skipped, so a sheet whose top half is empty costs two
+materials, not four. The same split serves the TF3 and TSW branches if their limits ever bite; the web branch wants the opposite (smaller, not split).</p></div>
+
 <h1>8 · Special objects</h1>
 <div class="two">
 <div>

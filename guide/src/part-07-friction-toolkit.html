@@ -21,12 +21,13 @@
     <li>Measure + write bogie XML, Patch vehicle blueprint</li>
     <li>IA jobs</li>
     <li>Lua skeleton</li>
+    <li>tsc_texture_split.py: oversized textures into tiles</li>
     <li>tsc_crosscheck.py</li>
     <li>Offline Lua testing</li>
     <li>Further scripts worth building (concepts)</li>
     <li>The daily loop with the tools</li>
   </ol></div>
-  <div class="foot">Files: <code>tools/blender/tsc_toolkit.py</code> (Blender 4.2+ add-on), <code>tools/tsc_crosscheck.py</code> (Python 3, standard library only),
+  <div class="foot">Files: <code>tools/blender/tsc_toolkit.py</code> and <code>tools/blender/tsc_texture_split.py</code> (Blender 4.2+ add-ons), <code>tools/tsc_crosscheck.py</code> (Python 3, standard library only),
   <code>tools/lua_mock/run_trolley_test.py</code> (Python 3 + <code>lupa</code>). The add-on's logic was exercised headless in Blender&nbsp;4.2 (bpy) on a
   synthetic locomotive; the cross-checker was run on the supplied Kuju samples. Test in your own Blender before relying on them.</div>
 </section>
@@ -147,7 +148,35 @@ parameter names on your build.</p>
 <pre>CTRL_REGULATOR = <span class="s">"Regulator"</span>
 CTRL_TROLLEYPOLEFRONT = <span class="s">"TrolleyPoleFront"</span></pre>
 
-<h1>9 · tsc_crosscheck.py</h1>
+<h1>9 · tsc_texture_split.py: oversized textures into tiles</h1>
+<p>The second add-on in the TSC tab (panel <b>Texture split</b>). It implements Part&nbsp;2 §7.1: a material whose images are larger than the tile size is replaced, on the
+selected mesh objects, by one material per used tile, with the mesh cut along the tile borders in UV space and the UVs remapped. Cropping, not baking: lossless and seconds, not minutes.</p>
+<table>
+<thead><tr><th style="width:40mm">Setting</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Output folder</td><td>Where the tile images go (your Textures directory). Names: <code>&lt;image&gt;_c&lt;col&gt;r&lt;row&gt;.tga</code>, one dot, as BRIAGE wants.</td></tr>
+<tr><td>Tile width / height px</td><td>2048 × 2048 by default. Any size works (the test used 1920 × 1080 too); the game wants powers of two.</td></tr>
+<tr><td>Border inset (texels)</td><td>0.5: UVs stop half a texel short of the tile edge so bilinear filtering never wraps to the opposite side. 0 for a mathematically exact crop.</td></tr>
+<tr><td>Pad partial tiles</td><td>When the sheet does not divide evenly, the last column/row tiles are written at their real size (e.g. 256 × 1080) or padded to the full tile.</td></tr>
+<tr><td>Format</td><td>TGA or PNG; ACE conversion is the same external step as before.</td></tr>
+<tr><td>Only material</td><td>Restrict to one material name; empty = every oversized material on the selection.</td></tr>
+<tr><td>Remove emptied slots</td><td>Drop the original material slot once no face uses it (the material itself stays in the file).</td></tr>
+</tbody></table>
+<ol class="steps">
+<li>Work on the export copy, not the master (the operator edits the mesh; undo works, but keep the master clean).</li>
+<li>Select the objects; set the folder and tile size; press <b>Split oversized textures into tiles</b>.</li>
+<li>Read the Text Editor block <code>Texture_Split</code>: grid, number of faces cut, tiles used. The JSON report in the output folder lists material → tile → images.</li>
+<li>Export with BRIAGE as usual: one material per tile, same shader settings (the tile materials are copies, including custom properties and node setup; every image node is swapped for its crop, repeat mode set to extend).</li>
+</ol>
+<p><b>How the cut works:</b> for each tile line, every face whose UVs straddle it is triangulated if needed, its crossing edges are split at the exact crossing (the new loop UVs are
+interpolated per adjacent face, so UV seams survive), and the two new vertices are connected. Vertices are shared across the cut, so smoothing and watertightness are kept; the only
+change is the material on each side. Faces whose UVs repeat beyond 0..1 are handled (the lines are generated across the mesh's UV range and tiles wrap).</p>
+<p><b>Tested</b> with <code>tools/tsc/texture_split_test.py</code>: a 4096 colour grid on a 310-face body became 586 faces in four 2048 tiles; 600 random surface points mapped back to
+the source position within 0.001 texel; render difference mean 0.0014; boundary edge count unchanged; a second map in the same material was cropped identically; custom properties
+survived the material copy; the 1920 × 1080 request produced 3 × 4 tiles, padded and unpadded. <span class="pill v">verified</span> Not run through BRIAGE or BPE2 here: the next check
+is one split object exported to an .igs and converted. <span class="pill u">check</span></p>
+
+<h1>10 · tsc_crosscheck.py</h1>
 <pre>python tools\tsc_crosscheck.py --engine Sample_Engine.xml --sim "Electric Engine Simulation.xml" ^
     --bogies "Sample Bogie 01.xml" "Sample Bogie 02.xml" ^
     --geo sample_engine.geo.xml --cabgeo sample_cab.geo.xml --csv TractiveEffortVsThrottle.csv</pre>
@@ -171,12 +200,12 @@ AnimationID; bogie and axle nodes exist, positions and radii; collision box vs e
 throttle curve origin; MaxContinuousForce ≤ MaxForce; <code>CabControlName</code> links; empty compressor; zero cut-out pressure; empty loco brake (info).
 Exit code 1 on any error, so it can gate a batch build.</p>
 
-<h1>10 · Offline Lua testing</h1>
+<h1>11 · Offline Lua testing</h1>
 <p><code>tools/lua_mock/run_trolley_test.py</code> loads a script into a Lua runtime (<code>pip install lupa</code>), replaces <code>Call</code>/<code>SysCall</code> with a Python mock
 holding control values, speed, curvature and animation times, and steps <code>Update</code> at 60&nbsp;Hz. Copy it for your own scripts: mock only the calls you use,
 script the player's inputs, assert on control values and alerts. It turns a five-minute game round-trip into a one-second test.</p>
 
-<h1>11 · Further scripts worth building (concepts)</h1>
+<h1>12 · Further scripts worth building (concepts)</h1>
 <table>
 <thead><tr><th style="width:44mm">Idea</th><th>What it would do</th><th style="width:30mm">Friction removed</th></tr></thead>
 <tbody>
@@ -190,7 +219,7 @@ script the player's inputs, assert on control values and alerts. It turns a five
 <tr><td>Round-trip diff</td><td>Read a serz-converted GEO and compare node names, positions and materials against the scene (what the supplied scene read did by hand).</td><td>“What actually got exported?”</td></tr>
 </tbody></table>
 
-<h1>12 · The daily loop with the tools</h1>
+<h1>13 · The daily loop with the tools</h1>
 <ol class="steps">
 <li>Model / animate in Blender; tag cab objects (<code>tsc_ia</code>, <code>tsc_control</code>).</li>
 <li><b>Validate</b> until no errors.</li>
