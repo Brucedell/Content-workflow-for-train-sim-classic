@@ -53,6 +53,13 @@ A browser app covering all three games, with two modes and two vehicles (a Bo-Bo
   LOD twins, UV checker, special objects, animation, bones and sockets (TSW), exploded export and the running result. Each step shows
   the bogie and rigid-frame variants side by side.
 
+- **Bogies on curves**: a plan view and a side view of the vehicle driving from straight track into a curve. Per game it shows which
+  number decides where a bogie turns (TSC: `BogeyPivotX` in the blueprint vs the Blender origin; TF3: the bogie node origin; TSW: the
+  SimuGraph Bogie offset vs the bogie bone), how the body sits as a chord between the pivots, how far wheels drift when Blender and the
+  editor disagree, and the middle-axle offset of a rigid wheelbase. Sliders for radius and both values; readouts in millimetres.
+- **Spoken tours**: every mode can be read aloud with the browser's own speech voices, with captions; the build and curves tours move
+  the view as they speak. Without voices the tours still run with captions.
+
 Run it locally with `cd walkthrough && python -m http.server 8790`, then open http://localhost:8790/. three.js 0.170 is vendored.
 
 ## The Train Sim World branch guide (PDF, separate folder)

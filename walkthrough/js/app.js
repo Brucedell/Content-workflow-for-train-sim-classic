@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildVehicle, buildTrack } from './models.js';
 import { GAMES, KINDS, STEPS, CATS, TRY } from './data.js';
+import { narrator } from './narrate.js';
+import { createCurves, CURVES, SLIDERS, tourFor } from './curves.js';
 
 // ---------------------------------------------------------------------------
 // state
@@ -21,8 +23,10 @@ const S = {
   selected: null,
   running: false, curve: false, lights: false, xray: false, labels: false,
   sound: store.get('sound', true),
+  narrate: false,
 };
 if (!GAMES[S.game]) S.game = 'tsc';
+if (!['explore', 'build', 'curves'].includes(S.mode)) S.mode = 'explore';
 if (!['bogie', 'rigid'].includes(S.type)) S.type = 'bogie';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -31,6 +35,8 @@ const canvas = $('#view');
 const labelLayer = $('#labels');
 const panel = $('#panel');
 const pipelineEl = $('#pipeline');
+const curvesEl = $('#curves');
+const captionEl = $('#caption');
 
 // ---------------------------------------------------------------------------
 // text markup
@@ -481,6 +487,7 @@ function act(what) {
     case 'lever': st.leverT = st.leverT > 0.5 ? 0 : 1; audio.clunk(); break;
     case 'xray': S.xray = !S.xray; applyXray(S.xray); break;
     case 'labels': S.labels = !S.labels; if (S.mode === 'explore') refreshExploreLabels(); break;
+    case 'narrate': S.narrate = !S.narrate; if (!S.narrate) stopTour(); else narrateCurrent(); break;
     case 'sound': S.sound = !S.sound; store.set('sound', S.sound); if (!S.sound) audio.mute(); else audio.unlock(); break;
     case 'show': break;
     case 'reset': frame(V.type); break;
@@ -500,7 +507,7 @@ function flashPart(id) {
 function syncToolbar() {
   for (const b of document.querySelectorAll('[data-act]')) {
     const a = b.dataset.act;
-    const on = { run: S.running, lights: S.lights, xray: S.xray, labels: S.labels, sound: S.sound }[a];
+    const on = { run: S.running, lights: S.lights, xray: S.xray, labels: S.labels, sound: S.sound, narrate: S.narrate }[a];
     if (on !== undefined) b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 }
@@ -559,7 +566,10 @@ function renderExplore() {
         <div><span>In the Blender master</span><code>${esc(sel.names.tsc)}</code></div>
         <div><span>In ${esc(g.short)}</span>${md(gk.node)}</div>
       </div>
-      ${tr && !gameAbsent(sel) ? `<button type="button" class="try" data-try="${tr[0]}">${esc(tr[1])}</button>` : ''}
+      <div class="nav" style="justify-content:flex-start;flex-wrap:wrap">
+        ${tr && !gameAbsent(sel) ? `<button type="button" class="try" data-try="${tr[0]}">${esc(tr[1])}</button>` : ''}
+        <button type="button" class="btn" data-read>${narrator.speaking ? 'Stop reading' : 'Read aloud'}</button>
+      </div>
       <dl class="facts">
         <div><dt>Files</dt><dd>${md(gk.files)}</dd></div>
         <div><dt>How it renders</dt><dd>${md(gk.render)}</dd></div>
@@ -579,6 +589,7 @@ function renderExplore() {
   panel.querySelectorAll('[data-part]').forEach(b => b.addEventListener('click', () => select(b.dataset.part)));
   panel.querySelector('[data-try]')?.addEventListener('click', e => act(e.currentTarget.dataset.try === 'show' ? 'show' : e.currentTarget.dataset.try));
   panel.querySelectorAll('[data-game-jump]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.gameJump)));
+  panel.querySelector('[data-read]')?.addEventListener('click', () => { if (narrator.speaking) stopTour(); else sayPart(); });
   panel.querySelectorAll('.journey li').forEach(li => {
     li.addEventListener('mouseenter', () => renderPipeline(gk.journey.map(j => j[0]), +li.dataset.stage));
     li.addEventListener('mouseleave', () => renderPipeline(gk.journey.map(j => j[0])));
@@ -599,6 +610,7 @@ function renderBuild() {
       <p class="eyebrow">${esc(GAMES[S.game].name)} · building the ${S.type === 'bogie' ? 'bogie electric' : 'rigid tank engine'}</p>
       <p class="lede">${md(GAMES[S.game].blurb)}</p>
     </div>
+    ${tourBar('Play the spoken walkthrough', 'Speaks each step and moves on by itself; the 3D view follows.')}
     <nav class="dots" aria-label="Steps">
       ${steps.map((s, i) => `<button type="button" class="dot ${i === S.step ? 'on' : ''} ${i < S.step ? 'done' : ''}" data-step="${i}" aria-label="Step ${i + 1}: ${esc(s.title)}"><span>${i + 1}</span></button>`).join('')}
     </nav>
@@ -620,8 +632,9 @@ function renderBuild() {
       </div>
     </article>
   `;
-  panel.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => { S.step = +b.dataset.step; renderBuild(); }));
-  panel.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { S.step += +b.dataset.nav; renderBuild(); }));
+  panel.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => { stopTour(); S.step = +b.dataset.step; renderBuild(); if (S.narrate) narrateCurrent(); }));
+  panel.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { stopTour(); S.step += +b.dataset.nav; renderBuild(); if (S.narrate) narrateCurrent(); }));
+  wireTourBar();
   panel.querySelectorAll('[data-type-jump]').forEach(b => b.addEventListener('click', () => setType(b.dataset.typeJump)));
   renderPipeline([st.stage], st.stage, st.stage);
   setScene(st.state, st);
@@ -629,19 +642,121 @@ function renderBuild() {
 }
 
 function select(id) {
+  stopTour();
   S.selected = id;
   const p = V.parts[id];
   if (p && (p.kind === 'cab' || p.kind === 'driver')) S.xray = true;
   exploreScene(); renderExplore();
+  if (S.narrate) sayPart();
+}
+
+// ---------------------------------------------------------------------------
+// narration: read a part, read or tour the build steps, tour the curves
+// ---------------------------------------------------------------------------
+let touring = false;
+function stopTour() { touring = false; narrator.stop(); }
+narrator.attach(captionEl, () => {
+  const b = panel.querySelector('[data-read]'); if (b) b.textContent = narrator.speaking ? 'Stop reading' : 'Read aloud';
+  const t = panel.querySelector('[data-tour]'); if (t) t.textContent = touring ? 'Stop the tour' : t.dataset.label;
+});
+function partSpeech() {
+  const p = V.parts[S.selected]; if (!p) return '';
+  const k = KINDS[p.kind], gk = k[S.game], g = GAMES[S.game];
+  return `${p.label}. ${k.summary} In ${g.name}: ${gk.node}. Files: ${gk.files}. ${gk.render} What moves it: ${gk.motion} Animation: ${gk.anim} Sound: ${gk.sound}`;
+}
+function sayPart() { narrator.say(partSpeech()); }
+function stepSpeech(i) {
+  const st = STEPS[S.game][i];
+  return `Step ${i + 1}. ${st.title}. ${st.text} ${st[S.type] || ''}`;
+}
+function narrateCurrent() {
+  if (S.mode === 'explore') sayPart();
+  else if (S.mode === 'build') narrator.say(stepSpeech(S.step));
+  else narrator.say(CURVES[S.game].intro);
+}
+async function runTour() {
+  if (touring) { stopTour(); return; }
+  narrator.stop();
+  touring = true;
+  if (S.mode === 'build') {
+    for (let i = S.step; i < STEPS[S.game].length && touring; i++) {
+      S.step = i; renderBuild(); touring = true;
+      const ok = await narrator.say(stepSpeech(i));
+      if (!ok || !touring) break;
+    }
+  } else if (S.mode === 'curves') {
+    curves.stopPlay();
+    for (const st of tourFor(S.game, S.type)) {
+      if (!touring) break;
+      curves.set(st.set);
+      const ok = await narrator.say(st.say);
+      if (!ok) break;
+    }
+  }
+  touring = false; narrator.stop();
+}
+function tourBar(label, note) {
+  const voices = narrator.voices;
+  return `<div class="tourbar">
+    <button type="button" class="btn primary" data-tour data-label="${esc(label)}">${touring ? 'Stop the tour' : esc(label)}</button>
+    <label class="sr" for="nar-rate" style="display:none">Speed</label>
+    <select id="nar-rate" aria-label="Speaking speed">${[[0.85, 'Slower'], [1, 'Normal speed'], [1.2, 'Faster']].map(([v, t]) => `<option value="${v}" ${narrator.rate === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    ${voices.length ? `<select id="nar-voice" aria-label="Voice">${voices.map(v => `<option ${narrator.voice === v.name ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>` : ''}
+    <small>${voices.length ? esc(note) : 'This browser has no speech voices, so the tour plays with captions only.'}</small>
+  </div>`;
+}
+function wireTourBar() {
+  panel.querySelector('[data-tour]')?.addEventListener('click', () => { audio.unlock(); runTour(); });
+  panel.querySelector('#nar-rate')?.addEventListener('change', e => { narrator.rate = +e.target.value; });
+  panel.querySelector('#nar-voice')?.addEventListener('change', e => { narrator.voice = e.target.value; });
+}
+
+// ---------------------------------------------------------------------------
+// bogies on curves
+// ---------------------------------------------------------------------------
+const curves = createCurves(curvesEl);
+function renderCurves() {
+  const c = CURVES[S.game], T = SLIDERS[S.game], g = GAMES[S.game];
+  panel.innerHTML = `
+    <div class="intro">
+      <p class="eyebrow">${esc(g.name)} · ${S.type === 'bogie' ? 'bogie electric' : 'rigid tank engine'} on straights and curves</p>
+      <p class="lede">The plan view follows the vehicle from straight track into a curve. ${S.type === 'bogie' ? 'The two lower sliders are the two numbers that decide where a bogie turns in this engine.' : 'A rigid frame has no bogies, so watch the middle wheelset.'}</p>
+    </div>
+    ${tourBar('Play the spoken explanation', 'The tour moves the vehicle and the sliders while it speaks.')}
+    <article class="card">
+      <header><h2>How ${esc(g.short)} moves body, bogies and wheels</h2></header>
+      <p>${md(c.intro)}</p>
+      ${S.type === 'rigid' ? `<p>${md(c.rigid)}</p>` : ''}
+      <h3>Where each number comes from</h3>
+      <div class="tablewrap"><table class="maptable">
+        <thead><tr><th>Question</th><th>You set it in</th><th>The engine uses it for</th></tr></thead>
+        <tbody>${c.rows.map(r => `<tr><td>${md(r[0])}</td><td>${md(r[1])}</td><td>${md(r[2])}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <h3>On straights and in curves</h3>
+      <ol class="journey">
+        <li><span class="sn">1</span><div><b>Straight track</b><p>Body, bogies and wheelsets line up on the centreline. Nothing rotates, so a wrong pivot does not show.</p></div></li>
+        <li><span class="sn">2</span><div><b>Entering the curve</b><p>${S.type === 'bogie' ? 'The front bogie turns to follow the rails while the body still points straight on.' : 'The front wheelset meets the curve; the whole frame starts to turn as one piece.'}</p></div></li>
+        <li><span class="sn">3</span><div><b>In the curve</b><p>${S.type === 'bogie' ? 'The body is a straight chord between the two pivots: its middle sits inside the curve, its ends swing outside, and the bogies turn by equal and opposite angles relative to the body.' : 'The frame is a chord between its outer wheelsets; the middle wheelset is pushed inward by the versine of the wheelbase.'}</p></div></li>
+        <li><span class="sn">4</span><div><b>Wheels</b><p>${md(c.rows.find(r => /spin/.test(r[0]))?.[2] || '')}</p></div></li>
+      </ol>
+      ${S.type === 'bogie' ? `<h3>When Blender and the editor disagree</h3><p class="callout">${md(c.wrong)}</p>
+      <p class="compare">Try it: press <b>Show a mismatch</b> under the view, then drive into the curve. The sliders here are <b>${esc(T.mesh[0])}</b> and <b>${esc(T.edit[0])}</b>.</p>` : ''}
+      <p class="compare">Same question in the other games:
+        ${Object.keys(GAMES).filter(x => x !== S.game).map(x => `<button type="button" class="link" data-game-jump="${x}">${GAMES[x].short}</button>`).join(' ')}</p>
+    </article>`;
+  wireTourBar();
+  panel.querySelectorAll('[data-game-jump]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.gameJump)));
+  renderPipeline(c.lit);
 }
 
 // ---------------------------------------------------------------------------
 // top-level switches
 // ---------------------------------------------------------------------------
-function setGame(g) { S.game = g; store.set('game', g); render(); }
+function setGame(g) { stopTour(); S.game = g; store.set('game', g); curves.setGame(g); render(); }
 function setType(t) {
   if (S.type === t) return;
-  S.type = t; store.set('type', t);
+  stopTour();
+  S.type = t; store.set('type', t); curves.setType(t);
   if (S.selected && !getVehicle(t).parts[S.selected]) S.selected = null;
   mountVehicle(); render(); frame(t);
 }
@@ -656,9 +771,14 @@ function render() {
   lastMode = S.mode;
   app.dataset.game = S.game; app.dataset.mode = S.mode;
   store.set('mode', S.mode);
-  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode ? 'true' : 'false'));
-  document.querySelectorAll('[data-game]').forEach(b => b.setAttribute('aria-pressed', b.dataset.game === S.game ? 'true' : 'false'));
-  document.querySelectorAll('[data-type]').forEach(b => b.setAttribute('aria-pressed', b.dataset.type === S.type ? 'true' : 'false'));
+  document.querySelectorAll('.bar [data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode ? 'true' : 'false'));
+  document.querySelectorAll('.bar [data-game]').forEach(b => b.setAttribute('aria-pressed', b.dataset.game === S.game ? 'true' : 'false'));
+  document.querySelectorAll('.bar [data-type]').forEach(b => b.setAttribute('aria-pressed', b.dataset.type === S.type ? 'true' : 'false'));
+  const curvesOn = S.mode === 'curves';
+  canvas.hidden = curvesOn; labelLayer.hidden = curvesOn;
+  document.querySelector('.tools').hidden = curvesOn; document.querySelector('.legend').hidden = curvesOn;
+  if (curvesOn) { curves.show(S.game, S.type); renderCurves(); themeColors(); return; }
+  curves.hide();
   if (S.mode === 'explore') {
     if (!S.selected || !V.parts[S.selected]) S.selected = S.type === 'bogie' ? 'wheels_f' : 'wheels';
     if (S.selected === 'cab' || S.selected === 'driver') S.xray = true;
@@ -666,13 +786,13 @@ function render() {
   } else renderBuild();
   themeColors();
 }
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { S.mode = b.dataset.mode; if (S.mode === 'explore') { S.xray = false; S.running = false; targetSpeed = 0; S.curve = false; } render(); }));
-document.querySelectorAll('[data-game]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.game)));
-document.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
+document.querySelectorAll('.bar [data-mode]').forEach(b => b.addEventListener('click', () => { stopTour(); S.mode = b.dataset.mode; if (S.mode === 'explore') { S.xray = false; S.running = false; targetSpeed = 0; S.curve = false; } render(); }));
+document.querySelectorAll('.bar [data-game]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.game)));
+document.querySelectorAll('.bar [data-type]').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
 window.addEventListener('keydown', e => {
-  if (S.mode !== 'build' || e.target.closest('input, textarea')) return;
-  if (e.key === 'ArrowRight') { S.step++; renderBuild(); }
-  if (e.key === 'ArrowLeft') { S.step--; renderBuild(); }
+  if (S.mode !== 'build' || e.target.closest('input, textarea, select')) return;
+  if (e.key === 'ArrowRight') { stopTour(); S.step++; renderBuild(); }
+  if (e.key === 'ArrowLeft') { stopTour(); S.step--; renderBuild(); }
 });
 
 // theme changes (system or viewer toggle)
@@ -693,6 +813,7 @@ function resize() {
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05); elapsed += dt;
+  if (S.mode === 'curves') { curves.update(dt); audio.running(0, V.type); requestAnimationFrame(loop); return; }
   resize();
   const st = V.state;
   const accel = reduced ? 100 : 3;
@@ -744,5 +865,7 @@ window.lpe = {
     const c = box.getCenter(new THREE.Vector3()).project(camera); const r = canvas.getBoundingClientRect();
     return { x: r.left + (c.x + 1) / 2 * r.width, y: r.top + (1 - c.y) / 2 * r.height };
   },
+  curves: { get params() { return curves.params; }, get geometry() { return curves.geometry; }, set: (o, i) => curves.set(o, i) },
+  tour: runTour, stopTour, get touring() { return touring; },
   view(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
 };
