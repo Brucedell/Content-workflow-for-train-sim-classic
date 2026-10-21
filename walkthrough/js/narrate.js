@@ -16,6 +16,11 @@ function loadVoices() {
 }
 if (synth) { loadVoices(); synth.addEventListener?.('voiceschanged', loadVoices); }
 
+let paused = false;
+let pauseGen = 0;          // bumps on every pause, so the sentence that was cut short is spoken again
+let pauseWaiters = [];
+let cutCurrent = null;     // ends the utterance (or reading timer) in progress
+
 export const narrator = {
   get available() { return !!synth && voices.length > 0; },
   get voices() { return voices; },
@@ -23,32 +28,57 @@ export const narrator = {
   set rate(r) { rate = r; },
   get voice() { return voiceName; },
   set voice(n) { voiceName = n; },
+  get paused() { return paused; },
   speaking: false,
   attach(el, cb) { captionEl = el; onStateChange = cb || (() => {}); },
   stop() {
     token++;
     this.speaking = false;
+    paused = false;
+    pauseWaiters.splice(0).forEach(f => f());
     try { synth?.cancel(); } catch { /* ignore */ }
+    cutCurrent?.();
     caption('');
     onStateChange();
   },
+  // pause mid-sentence; continue repeats that sentence from its start
+  pause() {
+    if (!this.speaking || paused) return;
+    paused = true; pauseGen++;
+    try { synth?.cancel(); } catch { /* ignore */ }
+    cutCurrent?.();
+    if (captionEl && !captionEl.hidden) captionEl.dataset.paused = 'true';
+    onStateChange();
+  },
+  resume() {
+    if (!paused) return;
+    paused = false;
+    if (captionEl) delete captionEl.dataset.paused;
+    pauseWaiters.splice(0).forEach(f => f());
+    onStateChange();
+  },
+  toggle() { if (paused) this.resume(); else this.pause(); },
   // speak a text (several sentences); resolves when done or stopped (false if stopped)
   say(text) {
     const my = ++token;
+    paused = false; pauseWaiters.splice(0).forEach(f => f());
+    if (captionEl) delete captionEl.dataset.paused;
     this.speaking = true; onStateChange();
     const sentences = splitSentences(toSpeech(text));
-    return new Promise(resolve => {
+    try { synth?.cancel(); } catch { /* ignore */ }
+    return (async () => {
       let i = 0;
-      const next = () => {
-        if (my !== token) return resolve(false);
-        if (i >= sentences.length) { this.speaking = false; caption(''); onStateChange(); return resolve(true); }
-        const s = sentences[i++];
-        caption(s.shown);
-        speakOne(s.spoken, my).then(next);
-      };
-      try { synth?.cancel(); } catch { /* ignore */ }
-      next();
-    });
+      while (true) {
+        if (my !== token) return false;
+        if (i >= sentences.length) { this.speaking = false; caption(''); onStateChange(); return true; }
+        if (paused) { await new Promise(r => pauseWaiters.push(r)); continue; }
+        caption(sentences[i].shown);
+        const g = pauseGen;
+        await speakOne(sentences[i].spoken, my);
+        if (g !== pauseGen) continue;          // cut short by a pause: say it again on continue
+        i++;
+      }
+    })();
   },
 };
 
@@ -64,7 +94,8 @@ function speakOne(text, my) {
     const words = text.split(/\s+/).length;
     const est = (words / 2.6) / rate * 1000 + 600;
     let done = false;
-    const finish = () => { if (!done) { done = true; resolve(); } };
+    const finish = () => { if (!done) { done = true; if (cutCurrent === finish) cutCurrent = null; resolve(); } };
+    cutCurrent = finish;
     if (!narrator.available) { setTimeout(finish, est); return; }
     let started = false;
     try {

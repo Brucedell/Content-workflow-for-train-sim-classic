@@ -44,7 +44,7 @@ Rebuild with `NODE_PATH=<global node_modules> node guide-tf3/build.js`.
 
 ## Interactive 3D walkthrough (`walkthrough/`)
 
-A browser app covering all three games, with two modes and two vehicles (a Bo-Bo electric with bogies and a 0-6-0 tank engine with a rigid frame):
+A browser app covering all three games, with five modes and two vehicles (a Bo-Bo electric with bogies and a 0-6-0 tank engine with a rigid frame):
 
 - **Explore a finished loco**: click any part (wheelsets, bogies, rods, doors, pantographs, lamps, horn, cab, collision hull…) to see,
   for TSC, TF3 or TSW, its node name, which file holds it, how it renders, what moves it, how it animates, how it sounds, and its path
@@ -52,13 +52,23 @@ A browser app covering all three games, with two modes and two vehicles (a Bo-Bo
 - **Build it step by step**: 12–13 steps per game from block-out to in-game asset, with the 3D view switching to show pivots, names,
   LOD twins, UV checker, special objects, animation, bones and sockets (TSW), exploded export and the running result. Each step shows
   the bogie and rigid-frame variants side by side.
-
 - **Bogies on curves**: a plan view and a side view of the vehicle driving from straight track into a curve. Per game it shows which
   number decides where a bogie turns (TSC: `BogeyPivotX` in the blueprint vs the Blender origin; TF3: the bogie node origin; TSW: the
   SimuGraph Bogie offset vs the bogie bone), how the body sits as a chord between the pivots, how far wheels drift when Blender and the
   editor disagree, and the middle-axle offset of a rigid wheelbase. Sliders for radius and both values; readouts in millimetres.
-- **Spoken tours**: every mode can be read aloud with the browser's own speech voices, with captions; the build and curves tours move
-  the view as they speak. Without voices the tours still run with captions.
+- **How simulation works**: a live driving model with the same parts the engines have. Keys or sliders drive throttle, reverser,
+  brake and sand; a flow diagram lights up from key press to control value, script, simulation and wheels. Charts show tractive effort
+  against speed (power and adhesion limits, train resistance, gradient) and the force balance; the air brake fills pipe then cylinders.
+  Four switchable scripts (smoothed throttle, vigilance, brake fade, auto-sand) show where scripting sits, with the Lua (TSC) or
+  SimuGraph/Blueprint (TSW) version of each. TF3 has no driver, so the AI drives to a line speed.
+- **How sound works**: a listening lab. Speed, power, brake, curve radius, jointed or welded rail and where you stand (cab, lineside,
+  100 m away) drive synthesized layers you can hear, mute and solo: traction motors or exhaust chuffs, blowers, rolling roar, rail-joint
+  clicks per axle, flange squeal, brake friction and squeal, air valves and the compressor, horn or whistle. Each layer has a live
+  meter and the curve that drives it (sample crossfades, pitch, compressor cut-in and cut-out); a strip shows the vehicle over the
+  joints and the di-dum rhythm per axle. The panel maps every layer to where TSC, TF3 and TSW author it.
+- **Spoken tours**: every mode can be read aloud with the browser's own speech voices, with captions; the tours move the view, the
+  sliders, the train or the sound lab as they speak. Pause and continue at any point (button or the P key); a paused sentence is
+  repeated from its start. Without voices the tours still run with captions.
 
 Run it locally with `cd walkthrough && python -m http.server 8790`, then open http://localhost:8790/. three.js 0.170 is vendored.
 

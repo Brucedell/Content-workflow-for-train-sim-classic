@@ -1,12 +1,15 @@
-// Locomotive Pipeline Explorer: two modes over one 3D scene.
+// Locomotive Pipeline Explorer: two 3D modes over one scene, plus three flat explainers.
 //   Explore: click a part of a finished vehicle, see what it is in TSC / TF3 / TSW and where it sits in the pipeline.
 //   Build:   step through turning a simple model into a game asset, for a bogie loco and a rigid-frame loco.
+//   Curves, simulation and sound: flat views of how each engine moves, drives and voices the vehicle.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildVehicle, buildTrack } from './models.js';
 import { GAMES, KINDS, STEPS, CATS, TRY } from './data.js';
 import { narrator } from './narrate.js';
 import { createCurves, CURVES, SLIDERS, tourFor } from './curves.js';
+import { createSim, SIMTEXT, SCRIPTS, TOPICS, simTour } from './sim.js';
+import { createSound, SOUNDTEXT, SOUNDTOPICS, LAYERS, soundTour } from './sound.js';
 
 // ---------------------------------------------------------------------------
 // state
@@ -26,7 +29,7 @@ const S = {
   narrate: false,
 };
 if (!GAMES[S.game]) S.game = 'tsc';
-if (!['explore', 'build', 'curves'].includes(S.mode)) S.mode = 'explore';
+if (!['explore', 'build', 'curves', 'sim', 'sound'].includes(S.mode)) S.mode = 'explore';
 if (!['bogie', 'rigid'].includes(S.type)) S.type = 'bogie';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -37,6 +40,8 @@ const panel = $('#panel');
 const pipelineEl = $('#pipeline');
 const curvesEl = $('#curves');
 const captionEl = $('#caption');
+const simEl = $('#sim');
+const soundEl = $('#sound');
 
 // ---------------------------------------------------------------------------
 // text markup
@@ -458,6 +463,7 @@ const audio = (() => {
     unlock,
     horn(type) { unlock(); if (type === 'bogie') tone([311, 370], 1.1, 'sawtooth', 0.12, 1800); else { tone([740, 1108], 1.3, 'sine', 0.1, 4000); noise(1.3, 2200, 1.5, 0.05); } },
     clunk() { unlock(); noise(0.18, 300, 1, 0.5, 'lowpass'); },
+    alarm() { tone([880], 0.35, 'square', 0.06, 3000); setTimeout(() => tone([880], 0.35, 'square', 0.06, 3000), 500); },
     chuff(level) { noise(0.16, 700, 0.8, 0.35 * level); },
     running(speed, type) {
       if (!ok()) return;
@@ -655,9 +661,20 @@ function select(id) {
 // ---------------------------------------------------------------------------
 let touring = false;
 function stopTour() { touring = false; narrator.stop(); }
-narrator.attach(captionEl, () => {
+const narrCtl = $('#narrctl');
+function syncNarration() {
   const b = panel.querySelector('[data-read]'); if (b) b.textContent = narrator.speaking ? 'Stop reading' : 'Read aloud';
   const t = panel.querySelector('[data-tour]'); if (t) t.textContent = touring ? 'Stop the tour' : t.dataset.label;
+  const label = narrator.paused ? 'Continue' : 'Pause';
+  const pb = panel.querySelector('[data-pause]'); if (pb) { pb.hidden = !narrator.speaking; pb.textContent = label; }
+  narrCtl.hidden = !narrator.speaking;
+  const nb = narrCtl.querySelector('[data-n="toggle"]'); nb.textContent = label; nb.setAttribute('aria-pressed', narrator.paused ? 'true' : 'false');
+}
+narrator.attach(captionEl, syncNarration);
+narrCtl.querySelector('[data-n="toggle"]').addEventListener('click', () => narrator.toggle());
+narrCtl.querySelector('[data-n="stop"]').addEventListener('click', () => stopTour());
+window.addEventListener('keydown', e => {
+  if ((e.key === 'p' || e.key === 'P') && narrator.speaking && !e.target.closest('input, textarea, select')) { e.preventDefault(); narrator.toggle(); }
 });
 function partSpeech() {
   const p = V.parts[S.selected]; if (!p) return '';
@@ -672,6 +689,8 @@ function stepSpeech(i) {
 function narrateCurrent() {
   if (S.mode === 'explore') sayPart();
   else if (S.mode === 'build') narrator.say(stepSpeech(S.step));
+  else if (S.mode === 'sim') narrator.say(SIMTEXT[S.game].input);
+  else if (S.mode === 'sound') narrator.say(SOUNDTEXT[S.game].intro);
   else narrator.say(CURVES[S.game].intro);
 }
 async function runTour() {
@@ -683,6 +702,22 @@ async function runTour() {
       S.step = i; renderBuild(); touring = true;
       const ok = await narrator.say(stepSpeech(i));
       if (!ok || !touring) break;
+    }
+  } else if (S.mode === 'sim') {
+    sim.reset();
+    for (const st of simTour(S.game, S.type)) {
+      if (!touring) break;
+      sim.set(st.set);
+      const ok = await narrator.say(st.say);
+      if (!ok) break;
+    }
+  } else if (S.mode === 'sound') {
+    lab.start();                                    // still inside the click, so the browser lets audio start
+    for (const st of soundTour(S.game, S.type)) {
+      if (!touring) break;
+      lab.set(st.set); renderSoundRows();
+      const ok = await narrator.say(st.say);
+      if (!ok) break;
     }
   } else if (S.mode === 'curves') {
     curves.stopPlay();
@@ -699,6 +734,7 @@ function tourBar(label, note) {
   const voices = narrator.voices;
   return `<div class="tourbar">
     <button type="button" class="btn primary" data-tour data-label="${esc(label)}">${touring ? 'Stop the tour' : esc(label)}</button>
+    <button type="button" class="btn" data-pause ${narrator.speaking ? '' : 'hidden'}>${narrator.paused ? 'Continue' : 'Pause'}</button>
     <label class="sr" for="nar-rate" style="display:none">Speed</label>
     <select id="nar-rate" aria-label="Speaking speed">${[[0.85, 'Slower'], [1, 'Normal speed'], [1.2, 'Faster']].map(([v, t]) => `<option value="${v}" ${narrator.rate === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
     ${voices.length ? `<select id="nar-voice" aria-label="Voice">${voices.map(v => `<option ${narrator.voice === v.name ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>` : ''}
@@ -707,6 +743,7 @@ function tourBar(label, note) {
 }
 function wireTourBar() {
   panel.querySelector('[data-tour]')?.addEventListener('click', () => { audio.unlock(); runTour(); });
+  panel.querySelector('[data-pause]')?.addEventListener('click', () => narrator.toggle());
   panel.querySelector('#nar-rate')?.addEventListener('change', e => { narrator.rate = +e.target.value; });
   panel.querySelector('#nar-voice')?.addEventListener('change', e => { narrator.voice = e.target.value; });
 }
@@ -750,13 +787,94 @@ function renderCurves() {
 }
 
 // ---------------------------------------------------------------------------
+// how simulation works
+// ---------------------------------------------------------------------------
+let chuffAngle = 0, lastChuff = 0;
+const sim = createSim(simEl, {
+  alarm: () => audio.alarm?.(),
+  tick: (st) => {
+    audio.running(Math.abs(st.v), S.type);
+    if (S.type === 'rigid' && Math.abs(st.v) > 0.05) {
+      chuffAngle += Math.abs(st.v) / 0.66 / 60;
+      const q = Math.floor(chuffAngle / (Math.PI / 2)); if (q !== lastChuff) { lastChuff = q; audio.chuff(Math.min(1, 0.3 + st.te / 95)); }
+    }
+  },
+});
+function renderSim() {
+  const T = SIMTEXT[S.game], g = GAMES[S.game];
+  const scriptHTML = Object.entries(SCRIPTS).map(([k, sc]) => {
+    const impl = sc[S.game];
+    return `<div class="scriptcard"><h4>${esc(sc.name)}</h4><p>${md(sc.what)}</p>
+      ${impl ? `<p>${md(impl.how)}</p><pre class="snip">${esc(impl.code)}</pre>` : `<p><b>Not possible in ${esc(g.short)}:</b> there is no per-frame vehicle script and no driver to act on.</p>`}</div>`;
+  }).join('');
+  panel.innerHTML = `
+    <div class="intro">
+      <p class="eyebrow">${esc(g.name)} · ${S.type === 'bogie' ? 'Bo-Bo electric' : '0-6-0 tank engine'} · how simulation works</p>
+      <p class="lede">${S.game === 'tf3' ? 'Set a line speed and watch the AI drive.' : 'Drive it: release the brake, reverser forward, open the throttle. Use the keys or the sliders under the charts.'} The model is an illustration with typical numbers, built from the same parts each engine has.</p>
+    </div>
+    ${tourBar('Play the spoken explanation', 'The tour drives the train while it explains: power, adhesion, braking, then scripts.')}
+    ${TOPICS.filter(([k]) => k !== 'where' && k !== 'script').map(([k, title]) => `<article class="card topic"><h3>${esc(title)}</h3><p>${md(T[k])}</p></article>`).join('')}
+    <article class="card topic"><h3>Where scripting fits</h3><p>${md(T.script)}</p>
+      <p class="compare">Switch the scripts on under the charts; each changes the live behaviour. How each is built in ${esc(g.short)}:</p>
+      ${scriptHTML}
+    </article>
+    <article class="card topic"><h3>Where the numbers live in ${esc(g.short)}</h3>
+      <div class="tablewrap"><table class="maptable"><tbody>${T.where.map(r => `<tr><td>${md(r[0])}</td><td>${md(r[1])}</td></tr>`).join('')}</tbody></table></div>
+      <p class="compare">Same question in the other games:
+        ${Object.keys(GAMES).filter(x => x !== S.game).map(x => `<button type="button" class="link" data-game-jump="${x}">${GAMES[x].short}</button>`).join(' ')}</p>
+    </article>`;
+  wireTourBar();
+  panel.querySelectorAll('[data-game-jump]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.gameJump)));
+  renderPipeline(T.lit);
+}
+
+// ---------------------------------------------------------------------------
+// how sound works
+// ---------------------------------------------------------------------------
+const lab = createSound(soundEl, { select: () => renderSoundRows() });
+// highlight the selected layer's row in the panel table
+function renderSoundRows() {
+  const sel = lab.state.sel;
+  panel.querySelectorAll('[data-srow]').forEach(r => r.classList.toggle('hot', r.dataset.srow === sel));
+}
+function renderSound() {
+  const T = SOUNDTEXT[S.game], g = GAMES[S.game];
+  const name = l => (typeof l.name === 'string' ? l.name : l.name[S.type]);
+  panel.innerHTML = `
+    <div class="intro">
+      <p class="eyebrow">${esc(g.name)} · ${S.type === 'bogie' ? 'Bo-Bo electric' : '0-6-0 tank engine'} · how sound works</p>
+      <p class="lede">Press <b>Start listening</b>, then move speed, power and brake. Click a layer to see the curve that drives it; <b>S</b> solos it, <b>M</b> mutes it. The sounds are synthesized stand-ins; what drives them is how the engines work.</p>
+    </div>
+    ${tourBar('Play the spoken explanation', 'The tour drives the lab while it speaks: motors, joints, curves, brakes, then where you listen from.')}
+    <article class="card">
+      <header><h2>How ${esc(g.short)} builds a vehicle's sound</h2></header>
+      <p>${md(T.intro)}</p>
+      <h3>Each layer in ${esc(g.short)}</h3>
+      <div class="tablewrap"><table class="maptable">
+        <thead><tr><th>Layer</th><th>What drives it</th><th>Where you author it</th></tr></thead>
+        <tbody>${LAYERS.map(l => `<tr data-srow="${l.id}"><td>${esc(name(l))}</td><td>${md(T.rows[l.id][0])}</td><td>${md(T.rows[l.id][1])}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="compare">${md(T.files)}</p>
+    </article>
+    ${SOUNDTOPICS.map(([k, title, text]) => `<article class="card topic"><h3>${esc(title)}</h3><p>${md(text)}</p>${k === 'listen' ? `<p><b>In ${esc(g.short)}:</b> ${md(T.listen)}</p>` : ''}</article>`).join('')}
+    <article class="card topic"><h3>Scripts and sound in ${esc(g.short)}</h3><p>${md(T.script)}</p>
+      <p class="compare">Same question in the other games:
+        ${Object.keys(GAMES).filter(x => x !== S.game).map(x => `<button type="button" class="link" data-game-jump="${x}">${GAMES[x].short}</button>`).join(' ')}</p>
+    </article>`;
+  wireTourBar();
+  panel.querySelectorAll('[data-game-jump]').forEach(b => b.addEventListener('click', () => setGame(b.dataset.gameJump)));
+  renderSoundRows();
+  renderPipeline(T.lit);
+}
+
+// ---------------------------------------------------------------------------
 // top-level switches
 // ---------------------------------------------------------------------------
-function setGame(g) { stopTour(); S.game = g; store.set('game', g); curves.setGame(g); render(); }
+function setGame(g) { stopTour(); S.game = g; store.set('game', g); curves.setGame(g); sim.setGame(g); lab.setGame(g); render(); }
 function setType(t) {
   if (S.type === t) return;
   stopTour();
-  S.type = t; store.set('type', t); curves.setType(t);
+  S.type = t; store.set('type', t); curves.setType(t); sim.setType(t); lab.setType(t);
   if (S.selected && !getVehicle(t).parts[S.selected]) S.selected = null;
   mountVehicle(); render(); frame(t);
 }
@@ -774,11 +892,15 @@ function render() {
   document.querySelectorAll('.bar [data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode ? 'true' : 'false'));
   document.querySelectorAll('.bar [data-game]').forEach(b => b.setAttribute('aria-pressed', b.dataset.game === S.game ? 'true' : 'false'));
   document.querySelectorAll('.bar [data-type]').forEach(b => b.setAttribute('aria-pressed', b.dataset.type === S.type ? 'true' : 'false'));
-  const curvesOn = S.mode === 'curves';
-  canvas.hidden = curvesOn; labelLayer.hidden = curvesOn;
-  document.querySelector('.tools').hidden = curvesOn; document.querySelector('.legend').hidden = curvesOn;
+  const curvesOn = S.mode === 'curves', simOn = S.mode === 'sim', soundOn = S.mode === 'sound', flat = curvesOn || simOn || soundOn;
+  canvas.hidden = flat; labelLayer.hidden = flat;
+  document.querySelector('.tools').hidden = flat; document.querySelector('.legend').hidden = flat;
+  if (!curvesOn) curves.hide();
+  if (!simOn) sim.hide();
+  if (!soundOn) lab.hide();
   if (curvesOn) { curves.show(S.game, S.type); renderCurves(); themeColors(); return; }
-  curves.hide();
+  if (simOn) { sim.show(S.game, S.type); renderSim(); themeColors(); return; }
+  if (soundOn) { lab.show(S.game, S.type); renderSound(); themeColors(); return; }
   if (S.mode === 'explore') {
     if (!S.selected || !V.parts[S.selected]) S.selected = S.type === 'bogie' ? 'wheels_f' : 'wheels';
     if (S.selected === 'cab' || S.selected === 'driver') S.xray = true;
@@ -814,6 +936,8 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05); elapsed += dt;
   if (S.mode === 'curves') { curves.update(dt); audio.running(0, V.type); requestAnimationFrame(loop); return; }
+  if (S.mode === 'sim') { sim.update(dt); requestAnimationFrame(loop); return; }
+  if (S.mode === 'sound') { lab.update(dt); audio.running(0, V.type); requestAnimationFrame(loop); return; }
   resize();
   const st = V.state;
   const accel = reduced ? 100 : 3;
@@ -867,5 +991,8 @@ window.lpe = {
   },
   curves: { get params() { return curves.params; }, get geometry() { return curves.geometry; }, set: (o, i) => curves.set(o, i) },
   tour: runTour, stopTour, get touring() { return touring; },
+  narrator: { pause: () => narrator.pause(), resume: () => narrator.resume(), get paused() { return narrator.paused; }, get speaking() { return narrator.speaking; } },
+  sim: { get state() { return sim.state; }, set: (o) => sim.set(o), reset: () => sim.reset() },
+  sound: { get state() { return lab.state; }, set: (o) => lab.set(o), start: () => lab.start(), stop: () => lab.stop(), horn: (on) => lab.horn(on) },
   view(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
 };

@@ -18,21 +18,21 @@
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --accent: var(--tsc); --accent-soft: var(--tsc-soft);
   --ballast: #c3bdb3; --sleeper: #8a7564; --rail: #59616b; --axle: #3b434d; --bodyc: #2f5d8a; --bogie: #3b434d; --bogie-fill: rgba(59,67,77,.18);
-  --blender: #d07a00; --bad: #c62828; --good: #1e6b35;
+  --blender: #d07a00; --bad: #c62828; --good: #1e6b35; --warn-line: #c77800;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0f141a; --surface: #161d25; --raised: #1c2530; --ink: #e5eaf0; --muted: #98a6b6; --line: #2a3542;
   --stage: #131a22; --ground: #2b322c;
   --tsc: #5ea6e8; --tf3: #b78ce2; --tsw: #e8687f; --tsc-soft: #172839; --tf3-soft: #261d33; --tsw-soft: #33191f;
   --hi: #ffc83d; --hi-ink: #241a00; --ok: #7fd49a; --ok-soft: #15291c; --warn: #f0b860; --warn-soft: #2e2412;
-  --ballast: #3a3833; --sleeper: #5a4a3c; --rail: #9aa3ad; --axle: #c9d1da; --bodyc: #6aa6dc; --bogie: #c9d1da; --bogie-fill: rgba(201,209,218,.12); --blender: #ffb347; --bad: #ff6b6b; --good: #7fd49a;
+  --ballast: #3a3833; --sleeper: #5a4a3c; --rail: #9aa3ad; --axle: #c9d1da; --bodyc: #6aa6dc; --bogie: #c9d1da; --bogie-fill: rgba(201,209,218,.12); --blender: #ffb347; --bad: #ff6b6b; --good: #7fd49a; --warn-line: #f2b04a;
   color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0f141a; --surface: #161d25; --raised: #1c2530; --ink: #e5eaf0; --muted: #98a6b6; --line: #2a3542;
   --stage: #131a22; --ground: #2b322c;
   --tsc: #5ea6e8; --tf3: #b78ce2; --tsw: #e8687f; --tsc-soft: #172839; --tf3-soft: #261d33; --tsw-soft: #33191f;
   --hi: #ffc83d; --hi-ink: #241a00; --ok: #7fd49a; --ok-soft: #15291c; --warn: #f0b860; --warn-soft: #2e2412;
-  --ballast: #3a3833; --sleeper: #5a4a3c; --rail: #9aa3ad; --axle: #c9d1da; --bodyc: #6aa6dc; --bogie: #c9d1da; --bogie-fill: rgba(201,209,218,.12); --blender: #ffb347; --bad: #ff6b6b; --good: #7fd49a;
+  --ballast: #3a3833; --sleeper: #5a4a3c; --rail: #9aa3ad; --axle: #c9d1da; --bodyc: #6aa6dc; --bogie: #c9d1da; --bogie-fill: rgba(201,209,218,.12); --blender: #ffb347; --bad: #ff6b6b; --good: #7fd49a; --warn-line: #f2b04a;
   color-scheme: dark; }
 .app[data-game="tf3"] { --accent: var(--tf3); --accent-soft: var(--tf3-soft); }
 .app[data-game="tsw"] { --accent: var(--tsw); --accent-soft: var(--tsw-soft); }
@@ -185,8 +185,9 @@ code { font-size: .88em; background: var(--raised); border: 1px solid var(--line
 .cctl output { font: 500 12px var(--mono); min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
 .cctl .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; }
 .cctl .c-bogie[hidden] { display: none; }
-.caption { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(720px, calc(100% - 24px)); padding: 8px 14px;
-  background: rgba(10,14,20,.86); color: #f3f6f9; border-radius: 6px; font-size: 15px; line-height: 1.45; text-align: center; pointer-events: none; z-index: 5; }
+.narrwrap { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(820px, calc(100% - 24px)); display: flex; gap: 8px; align-items: flex-end; justify-content: center; pointer-events: none; z-index: 6; }
+.caption { flex: 1; min-width: 0; padding: 8px 14px;
+  background: rgba(10,14,20,.86); color: #f3f6f9; border-radius: 6px; font-size: 15px; line-height: 1.45; text-align: center; }
 .tourbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
 .tourbar .btn { padding: 6px 12px; }
 .tourbar select { font: 13px var(--body); padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; }
@@ -196,8 +197,91 @@ code { font-size: .88em; background: var(--raised); border: 1px solid var(--line
 .maptable td { vertical-align: top; padding: 7px 6px 7px 0; border-bottom: 1px solid var(--line); }
 .maptable td:first-child { font: 700 13.5px/1.3 var(--display); color: var(--accent); width: 28%; }
 .tablewrap { overflow-x: auto; }
+.maptable tr.hot td { background: var(--accent-soft); }
 .callout { border-left: 3px solid var(--bad); background: var(--raised); padding: 8px 10px; border-radius: 0 6px 6px 0; font-size: 14px; }
 .callout b { color: var(--bad); }
+/* ---- how simulation works ---- */
+#sim { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(220px, 1fr) auto; gap: 0; background: var(--stage); overflow: auto; }
+#sim[hidden] { display: none; }
+.flow { padding: 10px 12px 6px; display: grid; gap: 6px; }
+.fl { display: flex; align-items: stretch; gap: 0; overflow-x: auto; scrollbar-width: thin; }
+.fn { flex: 1 0 118px; min-width: 118px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 6px 8px; display: grid; gap: 1px; transition: box-shadow .15s, border-color .15s, background .15s; }
+.fn b { font: 600 13.5px/1.15 var(--display); }
+.fn small { font-size: 11px; line-height: 1.25; color: var(--muted); }
+.fn small code { font-size: 10.5px; }
+.fn em { font: 500 11.5px/1.3 var(--mono); font-style: normal; color: var(--ink); font-variant-numeric: tabular-nums; }
+.fn.k-input { border-top: 3px solid var(--muted); } .fn.k-bus { border-top: 3px solid var(--accent); } .fn.k-script { border-top: 3px dashed var(--blender); }
+.fn.k-sim { border-top: 3px solid var(--good); } .fn.k-out { border-top: 3px solid var(--ink); } .fn.k-brake { border-top: 3px solid var(--warn-line); }
+.fn.hot { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent-soft); }
+.fn.k-brake.hot { border-color: var(--warn-line); }
+.fn.k-script.hot { border-color: var(--blender); }
+.fn.off { opacity: .5; }
+.fa { flex: 0 0 14px; align-self: center; height: 2px; background: var(--line); position: relative; }
+.fa::after { content: ""; position: absolute; right: -1px; top: -3px; border: 4px solid transparent; border-left-color: var(--line); }
+.fl.brk { padding-left: 132px; }
+.simcharts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 4px 12px; min-height: 0; }
+.cwrap { position: relative; min-height: 220px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.cwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.desk { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px 14px; padding: 10px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+.deskgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; align-content: start; min-width: 0; }
+.deskgrid label { display: grid; gap: 2px; font: 600 13px/1.2 var(--display); min-width: 0; }
+.deskgrid output { font: 500 11.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.deskgrid input[type=range] { width: 100%; accent-color: var(--accent); }
+.deskgrid select { font: 13px var(--body); padding: 3px 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+.deskbtns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; grid-column: 1 / -1; }
+.deskbtns button, .scripts button { border: 1px solid var(--line); background: var(--raised); border-radius: 6px; padding: 5px 10px; font: 600 13px/1.2 var(--display); cursor: pointer; color: var(--ink); }
+.deskbtns button[aria-pressed="true"] { background: var(--warn-line); color: #1a1200; border-color: var(--warn-line); }
+.deskbtns .chk { display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--display); }
+.keys { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.scripts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scripts > span { font: 600 12px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--blender); margin-right: 4px; }
+.scripts button[aria-pressed="true"] { background: var(--blender); color: #1a1200; border-color: var(--blender); }
+.scripts button:disabled { opacity: .45; cursor: not-allowed; }
+.gauges { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px; align-content: start; }
+.gauge { background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; display: grid; }
+.gauge span { font: 600 11px/1.2 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.gauge b { font: 600 18px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.gauge b small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.gauge.big b { font-size: 26px; color: var(--accent); }
+.gauge.warn b { color: var(--bad); }
+.lamps { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12.5px; }
+.lamp { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.lamp i { width: 12px; height: 12px; border-radius: 50%; background: var(--line); display: inline-block; }
+.lamp.on { color: var(--ink); font-weight: 700; } .lamp.on.red i { background: var(--bad); box-shadow: 0 0 8px var(--bad); } .lamp.on.amber i { background: var(--warn-line); box-shadow: 0 0 8px var(--warn-line); }
+.scriptcard { border: 1px dashed var(--blender); border-radius: 6px; padding: 8px 10px; display: grid; gap: 6px; }
+.scriptcard h4 { margin: 0; font: 700 15px/1.2 var(--display); color: var(--blender); }
+.scriptcard p { font-size: 14px; }
+.topic h3 { margin-top: 2px; }
+/* ---- how sound works ---- */
+#sound { position: absolute; inset: 0; display: grid; grid-template-rows: minmax(250px, 1fr) 170px auto; gap: 8px; padding-top: 10px; background: var(--stage); overflow: auto; }
+#sound[hidden] { display: none; }
+.sndtop { display: grid; grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr); gap: 10px; padding: 0 12px; min-height: 0; }
+.layers { display: grid; align-content: start; gap: 3px; min-width: 0; overflow: auto; }
+.lrow { display: grid; grid-template-columns: minmax(0, 1fr) 80px 26px 26px; gap: 6px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 5px; }
+.lrow.sel { border-color: var(--lc); box-shadow: inset 3px 0 0 var(--lc); }
+.lrow.quiet { opacity: .5; }
+.lname { all: unset; cursor: pointer; display: grid; grid-template-columns: 12px 1fr; column-gap: 7px; align-items: center; font: 600 13.5px/1.15 var(--display); color: var(--ink); min-width: 0; }
+.lname:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.lname i { width: 10px; height: 10px; border-radius: 2px; background: var(--lc); grid-row: span 2; }
+.lname small { grid-column: 2; font: 400 11px/1.25 var(--body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meter { height: 10px; border-radius: 5px; background: var(--raised); border: 1px solid var(--line); overflow: hidden; }
+.meter b { display: block; height: 100%; width: 0; background: var(--lc); transition: width .08s linear; }
+.ms { border: 1px solid var(--line); background: var(--raised); border-radius: 5px; padding: 3px 0; font: 700 12px/1 var(--display); cursor: pointer; color: var(--ink); }
+.ms[data-mute][aria-pressed="true"] { background: var(--bad); color: #fff; border-color: var(--bad); }
+.ms[data-solo][aria-pressed="true"] { background: var(--hi); color: var(--hi-ink); border-color: var(--hi); }
+.cwrap.strip { margin: 0 12px; min-height: 0; }
+.snddesk { grid-template-columns: 1fr; }
+.sndbtns { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.sndbtns small { color: var(--muted); font-size: 12px; flex: 1 1 220px; }
+.seg.listen button { padding: 6px 10px; font: 600 13px/1.2 var(--display); }
+.sndgrid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+#snd-horn { touch-action: none; user-select: none; -webkit-user-select: none; }
+.narrctl { pointer-events: auto; flex: 0 0 auto; display: flex; gap: 6px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.narrctl button { border: 1px solid var(--line); background: var(--raised); border-radius: 6px; padding: 5px 12px; font: 700 13px/1.2 var(--display); cursor: pointer; color: var(--ink); }
+.narrctl button[data-n="toggle"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.narrctl small { color: var(--muted); font-size: 11.5px; padding-right: 4px; }
+.caption[data-paused]::before { content: "Paused · "; font-weight: 700; color: #ffd76a; }
+@media (max-width: 520px) { .narrwrap { flex-direction: column; align-items: stretch; } .narrctl small { display: none; } }
 @media (max-width: 1500px) { .brand span { display: none; } }
 @media (max-width: 960px) {
   .app { height: auto; min-height: 100%; }
@@ -207,11 +291,28 @@ code { font-size: .88em; background: var(--raised); border: 1px solid var(--line
   .brand span { display: none; }
 }
 @media (max-width: 960px) {
+  .app[data-mode="sim"] .stagewrap { height: auto; min-height: 0; }
+  .app[data-mode="sim"] .stage3d { overflow: visible; }
+  #sim { position: relative; grid-template-rows: auto auto auto; }
+  .simcharts { grid-template-columns: 1fr; }
+  .desk { grid-template-columns: 1fr; }
+  .gauges { grid-column: 1; grid-row: auto; }
+  .fl.brk { padding-left: 0; }
   .app[data-mode="curves"] .stagewrap { height: auto; min-height: 0; }
   .app[data-mode="curves"] .stage3d { overflow: visible; }
   #curves { position: relative; grid-template-rows: 380px 140px auto; }
+  .app[data-mode="sound"] .stagewrap { height: auto; min-height: 0; }
+  .app[data-mode="sound"] .stage3d { overflow: visible; }
+  #sound { position: relative; grid-template-rows: auto 190px auto; }
+  .sndtop { grid-template-columns: 1fr; }
+  .sndtop .cwrap { min-height: 240px; }
 }
 @media (max-width: 520px) {
+  .seg[aria-label="Mode"] { display: grid; grid-template-columns: 1fr 1fr; }
+  .seg[aria-label="Mode"] button:nth-child(odd) { border-left: 0; }
+  .seg[aria-label="Mode"] button:nth-child(5) { grid-column: 1 / -1; }
+  .lrow { grid-template-columns: minmax(0, 1fr) 56px 26px 26px; }
+  .seg[aria-label="Mode"] button:nth-child(n+3) { border-top: 1px solid var(--line); }
   #curves { grid-template-rows: 340px 130px auto; }
   #readout { font-size: 11px; padding: 6px 8px; max-width: 75%; }
   #readout em { font-size: 11px; }
@@ -233,6 +334,8 @@ code { font-size: .88em; background: var(--raised); border: 1px solid var(--line
         <button type="button" data-mode="explore" aria-pressed="true">Explore a finished loco</button>
         <button type="button" data-mode="build" aria-pressed="false">Build it step by step</button>
         <button type="button" data-mode="curves" aria-pressed="false">Bogies on curves</button>
+        <button type="button" data-mode="sim" aria-pressed="false">How simulation works</button>
+        <button type="button" data-mode="sound" aria-pressed="false">How sound works</button>
       </div></div>
     <div class="ctl"><span class="seg-label">Game</span>
       <div class="seg games" role="group" aria-label="Game">
@@ -282,7 +385,76 @@ code { font-size: .88em; background: var(--raised); border: 1px solid var(--line
             <div class="btns c-bogie"><button type="button" class="btn" id="c-ok">Make them agree</button><button type="button" class="btn" id="c-bad">Show a mismatch</button></div>
           </div>
         </div>
-        <div class="caption" id="caption" hidden></div>
+        <div id="sim" hidden>
+          <div class="flow" id="flow" aria-label="Signal flow from input to wheels"></div>
+          <div class="simcharts">
+            <div class="cwrap"><canvas id="tecurve" aria-label="Tractive effort against speed with the operating point"></canvas></div>
+            <div class="cwrap"><canvas id="trace" aria-label="Speed and brake cylinder over time, and the force balance"></canvas></div>
+          </div>
+          <div class="desk">
+            <div id="desk-driver" class="deskgrid">
+              <label id="s-thr-l" for="s-thr">Throttle <output id="s-thr-v">0 %</output><input id="s-thr" type="range" min="0" max="1" step="0.05" value="0"></label>
+              <label id="s-rev-l" for="s-rev">Reverser <output id="s-rev-v">Forward</output><input id="s-rev" type="range" min="-1" max="1" step="1" value="1"></label>
+              <label for="s-brk">Train brake <output id="s-brk-v">60 % service</output><input id="s-brk" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+              <div class="deskbtns">
+                <button type="button" id="s-sand" aria-pressed="false">Sand (X)</button>
+                <button type="button" id="s-ack">Acknowledge (Q)</button>
+                <label class="chk" for="s-panto"><input id="s-panto" type="checkbox" checked> Pantograph up</label>
+              </div>
+              <small class="keys">Keys: A / D throttle · W / S reverser · ; release and ' apply brake · X sand · Q acknowledge</small>
+            </div>
+            <div id="desk-ai" class="deskgrid" hidden>
+              <label for="s-ai">Line speed (the AI drives) <output id="s-ai-v">80 km/h</output><input id="s-ai" type="range" min="0" max="140" step="5" value="80"></label>
+              <small class="keys">TF3 has no cab and no driver input. Set the speed the line allows and watch the AI use the vehicle's numbers.</small>
+            </div>
+            <div class="deskgrid">
+              <label for="s-wag">Train <output id="s-wag-v"></output><input id="s-wag" type="range" min="0" max="20" step="1" value="6"></label>
+              <label for="s-grd">Gradient <output id="s-grd-v"></output><input id="s-grd" type="range" min="-2.5" max="2.5" step="0.1" value="0"></label>
+              <label for="s-rail">Rail <select id="s-rail"><option value="dry">Dry rail</option><option value="wet">Wet rail</option><option value="leaves">Leaves on the line</option></select></label>
+            </div>
+            <div class="scripts" id="scripts"><span>Scripts</span>
+              <button type="button" data-script="smooth" aria-pressed="false">Smoothed throttle</button>
+              <button type="button" data-script="vigilance" aria-pressed="false">Vigilance</button>
+              <button type="button" data-script="fade" aria-pressed="false">Brake fade</button>
+              <button type="button" data-script="autosand" aria-pressed="false">Auto-sand</button>
+            </div>
+            <div class="gauges" id="gauges"></div>
+          </div>
+        </div>
+        <div id="sound" hidden>
+          <div class="sndtop">
+            <div class="layers" id="snd-layers" aria-label="Sound layers"></div>
+            <div class="cwrap"><canvas id="snd-curve" aria-label="The curves that drive the selected layer, with the current value"></canvas></div>
+          </div>
+          <div class="cwrap strip"><canvas id="snd-strip" aria-label="The vehicle over jointed track and the rhythm of joint clicks per axle"></canvas></div>
+          <div class="desk snddesk">
+            <div class="sndbtns">
+              <button type="button" class="btn primary" id="snd-go" aria-pressed="false">Start listening</button>
+              <button type="button" class="btn" id="snd-horn">Horn (hold)</button>
+              <div class="seg listen" id="snd-listen" role="group" aria-label="Listen from">
+                <button type="button" data-listen="cab" aria-pressed="false">In the cab</button>
+                <button type="button" data-listen="side" aria-pressed="true">Lineside</button>
+                <button type="button" data-listen="far" aria-pressed="false">100 m away</button>
+              </div>
+              <small id="snd-note"></small>
+            </div>
+            <div class="deskgrid sndgrid">
+              <label for="snd-v">Speed <output id="snd-v-v">0 km/h</output><input id="snd-v" type="range" min="0" max="140" step="1" value="0"></label>
+              <label id="snd-load-l" for="snd-load">Power <output id="snd-load-v">0 %</output><input id="snd-load" type="range" min="0" max="1" step="0.05" value="0"></label>
+              <label for="snd-brake">Brake <output id="snd-brake-v">Released</output><input id="snd-brake" type="range" min="0" max="1" step="0.05" value="0"></label>
+              <label for="snd-radius">Track <select id="snd-radius"><option value="0">Straight</option><option value="400">400 m curve</option><option value="200">200 m curve</option><option value="120">120 m curve</option><option value="80">80 m curve</option></select></label>
+              <label for="snd-rail">Rail <select id="snd-rail"><option value="jointed">Jointed (18.3 m)</option><option value="welded">Welded</option></select></label>
+            </div>
+          </div>
+        </div>
+        <div class="narrwrap">
+          <div class="caption" id="caption" hidden></div>
+          <div class="narrctl" id="narrctl" hidden>
+            <button type="button" data-n="toggle" aria-pressed="false">Pause</button>
+            <button type="button" data-n="stop">Stop</button>
+            <small>P to pause</small>
+          </div>
+        </div>
       </div>
       <div class="pipeline" id="pipeline" aria-label="Production pipeline"></div>
     </section>
