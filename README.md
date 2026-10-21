@@ -42,6 +42,19 @@ The TF3 set only covers what TF3 adds or changes; shared modelling rules live in
 
 Rebuild with `NODE_PATH=<global node_modules> node guide-tf3/build.js`.
 
+## Interactive 3D walkthrough (`walkthrough/`)
+
+A browser app covering all three games, with two modes and two vehicles (a Bo-Bo electric with bogies and a 0-6-0 tank engine with a rigid frame):
+
+- **Explore a finished loco**: click any part (wheelsets, bogies, rods, doors, pantographs, lamps, horn, cab, collision hull…) to see,
+  for TSC, TF3 or TSW, its node name, which file holds it, how it renders, what moves it, how it animates, how it sounds, and its path
+  through that game's pipeline. "Try it" runs the part (wheels turn, doors open, horn sounds).
+- **Build it step by step**: 12–13 steps per game from block-out to in-game asset, with the 3D view switching to show pivots, names,
+  LOD twins, UV checker, special objects, animation, bones and sockets (TSW), exploded export and the running result. Each step shows
+  the bogie and rigid-frame variants side by side.
+
+Run it locally with `cd walkthrough && python -m http.server 8790`, then open http://localhost:8790/. three.js 0.170 is vendored.
+
 ## The Train Sim World branch guide (PDF, separate folder)
 
 From the same master scene to a TSW vehicle: TSW wants one skinned skeletal mesh, clips scrubbed by values, sockets, and a family of
